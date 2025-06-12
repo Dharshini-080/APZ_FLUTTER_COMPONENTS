@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
-enum AppzFieldAppearance { primary, secondary }
+enum ApzFieldAppearance { primary, secondary }
 
-class AppzInputField extends StatelessWidget {
+class ApzInputField extends StatelessWidget {
   final String label;
   final String? hintText;
   final TextEditingController controller;
@@ -25,9 +25,9 @@ class AppzInputField extends StatelessWidget {
   final void Function()? onEditingComplete;
   final int? maxLength;
   final int maxLines;
-  final AppzFieldAppearance appearance;
+  final ApzFieldAppearance appearance;
 
-  const AppzInputField({
+  const ApzInputField({
     super.key,
     required this.label,
     required this.controller,
@@ -49,7 +49,7 @@ class AppzInputField extends StatelessWidget {
     this.onEditingComplete,
     this.maxLength,
     this.maxLines = 1,
-    this.appearance = AppzFieldAppearance.primary,
+    this.appearance = ApzFieldAppearance.primary,
   });
 
   String? _validate(String? value) {
@@ -138,7 +138,7 @@ class AppzInputField extends StatelessWidget {
       ),
     );
 
-    return appearance == AppzFieldAppearance.primary
+    return appearance == ApzFieldAppearance.primary
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
