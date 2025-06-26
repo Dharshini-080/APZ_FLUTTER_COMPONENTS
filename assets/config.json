@@ -1,0 +1,28 @@
+{
+  "notes": "Placeholder for AppzInputField UI properties. Will be populated later.",
+  "colors": {
+    "primary": null,
+    "secondary": null,
+    "error": null,
+    "success": null,
+    "disabledBackground": null,
+    "disabledText": null,
+    "disabledBorder": null,
+    "focusedBorder": null,
+    "labelText": null,
+    "inputText": null,
+    "hintText": null
+  },
+  "dimensions": {
+    "borderRadius": null,
+    "paddingVertical": null,
+    "paddingHorizontal": null,
+    "labelPadding": null,
+    "iconSize": null
+  },
+  "typography": {
+    "fontFamily": null,
+    "fontSize": null,
+    "labelFontSize": null
+  }
+}
