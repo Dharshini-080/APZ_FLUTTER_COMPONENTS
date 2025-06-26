@@ -23,7 +23,7 @@ class AppzInputField extends StatefulWidget {
   /// The current interactive or validation state of the field.
   /// This can be set externally or managed internally based on validation.
   /// Defaults to [AppzInputFieldState.defaultState].
-  final AppzInputFieldState fieldState;
+  final AppzInputFieldState fieldState; // TODO: Revisit how this interacts with internal state
 
   /// The positioning of the label relative to the input field.
   /// Defaults to [AppzInputLabelPosition.top].
@@ -78,7 +78,7 @@ class AppzInputField extends StatefulWidget {
     required this.label,
     this.hintText,
     this.appearance = AppzInputFieldAppearance.primary,
-    this.fieldState = AppzInputFieldState.defaultState, // TODO: Revisit how this interacts with internal state
+    this.fieldState = AppzInputFieldState.defaultState,
     this.labelPosition = AppzInputLabelPosition.top,
     this.validationType = AppzInputValidationType.none,
     this.inputType = AppzInputType.text,
@@ -154,173 +154,11 @@ class _AppzInputFieldState extends State<AppzInputField> {
       case AppzInputType.password:
         return TextInputType.visiblePassword; // TextFormField handles obscuring
       case AppzInputType.date:
+      case AppzInputType.dateTime: // Both map to datetime for keyboard
         return TextInputType.datetime;
-      case AppzInputType.dateTime:
-        return TextInputType.datetime;
-      default:
-        return TextInputType.text;
+      // No default needed as all enum values are covered.
+      // Dart analyzer will warn if a new enum value is added and not handled.
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // These are temporary hardcoded styles, to be replaced by JSON config
-    // These are temporary hardcoded styles, to be replaced by JSON config
-    // Base Colors
-    const defaultBorderColor = Color(0xFFD7DBE0);
-    const focusedBorderColor = Color(0xFF6192F9); // Blue
-    const errorBorderColor = Color(0xFFE03333); // Red
-    const successBorderColor = Color(0xFF4CAF50); // Green (example)
-    const defaultBackgroundColor = Color(0xFFF3F4F6);
-
-    // Text Colors
-    const inputTextColor = Color(0xFF24272D); // Active input text
-    const labelTextColor = Color(0xFFB3BBC6); // Default label
-    const hintTextColor = Color(0xFFB3BBC6); // Default placeholder
-    const disabledTextColor = Color(0xFFB3BBC6); // Disabled text (same as hint/label)
-
-    // Disabled Styles
-    const disabledBackgroundColor = Color(0xFFF3F4F6); // Same as default, but border might differ or be less prominent
-    const disabledBorderColor = Color(0xFFE5E7EB); // Lighter grey for disabled border
-
-    bool isEnabled = widget.fieldState != AppzInputFieldState.disabled;
-
-    Color currentFillColor = defaultBackgroundColor;
-    Color currentHintColor = hintTextColor;
-    Color currentInputBorderColor = defaultBorderColor; // For enabledBorder
-    Color currentFocusedBorderColor = focusedBorderColor;
-    TextStyle currentInputTextStyle = const TextStyle(color: inputTextColor, fontSize: 14, fontWeight: FontWeight.w500);
-
-    if (!isEnabled) {
-      currentFillColor = disabledBackgroundColor;
-      currentHintColor = disabledTextColor;
-      currentInputBorderColor = disabledBorderColor;
-      currentFocusedBorderColor = disabledBorderColor; // Focused border same as normal when disabled
-      currentInputTextStyle = const TextStyle(color: disabledTextColor, fontSize: 14, fontWeight: FontWeight.w500);
-    }
-
-    // Determine border color based on state precedence: error > success > focused > default
-    // This applies to the general 'enabled' state. Disabled state has its own border color.
-    if (isEnabled) {
-      if (_hasError) {
-        currentInputBorderColor = errorBorderColor;
-        currentFocusedBorderColor = errorBorderColor; // Error border persists on focus
-      } else if (widget.fieldState == AppzInputFieldState.success) {
-        currentInputBorderColor = successBorderColor;
-        currentFocusedBorderColor = successBorderColor; // Success border persists on focus
-      } else if (widget.fieldState == AppzInputFieldState.focused) {
-        // This is for the 'focusedBorder' property, not the general 'currentInputBorderColor'
-        // currentInputBorderColor remains defaultBorderColor unless error/success
-      }
-    }
-
-    // Specific border for the 'border' property (when not focused, not error, not success)
-    final BorderSide defaultEnabledOutlineBorderSide = BorderSide(color: currentInputBorderColor, width: 1);
-
-    final inputDecoration = InputDecoration(
-      hintText: widget.hintText,
-      hintStyle: TextStyle(color: currentHintColor, fontSize: 14, fontWeight: FontWeight.w500),
-      filled: true,
-      fillColor: currentFillColor,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      border: OutlineInputBorder( // Default border when nothing else applies (usually not visible due to enabledBorder/focusedBorder)
-        borderRadius: BorderRadius.circular(12),
-        borderSide: defaultEnabledOutlineBorderSide,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: defaultEnabledOutlineBorderSide, // Uses currentInputBorderColor determined above
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: isEnabled ? currentFocusedBorderColor : disabledBorderColor, // Use specific focused color or disabled color
-          width: 1.5
-        ),
-      ),
-      errorBorder: OutlineInputBorder( // Used when `validator` returns an error OR `errorText` is not null
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: errorBorderColor, width: 1),
-      ),
-      focusedErrorBorder: OutlineInputBorder( // Used when `validator` returns an error AND field is focused
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: errorBorderColor, width: 1.5),
-      ),
-      disabledBorder: OutlineInputBorder( // Used when `enabled` is false
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: disabledBorderColor, width: 1),
-      ),
-      prefixIcon: widget.prefixIcon,
-      suffixIcon: widget.suffixIcon,
-      // errorText: _effectiveErrorMessage, // Let TextFormField handle displaying this via its validator or errorText from decoration
-    );
-
-    final textFormField = TextFormField(
-      controller: _internalController,
-      focusNode: _internalFocusNode,
-      keyboardType: _mapInputTypeToKeyboardType(widget.inputType),
-      textInputAction: widget.textInputAction,
-      obscureText: widget.obscureText || widget.inputType == AppzInputType.password,
-      maxLines: widget.inputType == AppzInputType.multiline ? null : 1,
-      minLines: widget.inputType == AppzInputType.multiline ? 3 : 1,
-      onChanged: widget.onChanged,
-      onTap: widget.onTap,
-      onFieldSubmitted: widget.onSubmitted,
-      enabled: isEnabled,
-      // validator: _validate,
-      style: currentInputTextStyle,
-      decoration: inputDecoration,
-    );
-
-    // Label style might also change based on disabled state, but for now, keep it consistent.
-    final labelWidget = Text(
-      widget.label,
-      style: const TextStyle(
-        color: labelTextColor, // Potentially: isEnabled ? labelTextColor : disabledTextColor,
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
-      ),
-    );
-
-    Widget fieldLayout;
-    if (widget.labelPosition == AppzInputLabelPosition.top) {
-      fieldLayout = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          labelWidget,
-          const SizedBox(height: 4), // Space between label and field
-          textFormField,
-        ],
-      );
-    } else { // AppzInputLabelPosition.left
-      fieldLayout = Row(
-        crossAxisAlignment: CrossAxisAlignment.start, // Align label with top of the field
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0, top: 12.0), // Adjust padding for alignment
-            child: labelWidget,
-          ),
-          Expanded(child: textFormField),
-        ],
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        fieldLayout,
-        if (_effectiveErrorMessage != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6.0, left: 12.0), // Consistent with input padding
-            child: Text(
-              _effectiveErrorMessage!,
-              style: const TextStyle(color: errorBorderColor, fontSize: 12),
-            ),
-          ),
-      ],
-    );
   }
 
   String? _validate(String? value) {
@@ -328,7 +166,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (widget.validator != null) {
       final externalValidationError = widget.validator!(value);
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
+        if (mounted && _internalErrorMessage != externalValidationError) {
           setState(() {
             _internalErrorMessage = externalValidationError;
           });
@@ -347,57 +185,197 @@ class _AppzInputFieldState extends State<AppzInputField> {
         }
         break;
       case AppzInputValidationType.email:
-        if (trimmedValue.isEmpty && widget.validationType == AppzInputValidationType.mandatory) { // Should chain with mandatory if also set
-             validationError = 'This field is required.'; // TODO: Localize
-        } else if (trimmedValue.isNotEmpty) {
-          // Basic email regex - for more robust validation, consider a library
+        if (trimmedValue.isNotEmpty) {
           final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
           if (!emailRegex.hasMatch(trimmedValue)) {
             validationError = 'Enter a valid email address.'; // TODO: Localize
           }
         }
         break;
-      // TODO: Implement other validation types (numeric, amount, password)
       case AppzInputValidationType.numeric:
+        if (trimmedValue.isNotEmpty && double.tryParse(trimmedValue) == null) {
+            validationError = 'Enter a valid number.'; // TODO: Localize
+        }
+        break;
       case AppzInputValidationType.amount:
-      case AppzInputValidationType.password:
+        if (trimmedValue.isNotEmpty) {
+            final number = double.tryParse(trimmedValue);
+            if (number == null) {
+                validationError = 'Enter a valid amount.'; // TODO: Localize
+            } else if (number < 0) {
+                // validationError = 'Amount cannot be negative.'; // Example specific rule for future
+            }
+        }
+        break;
+      case AppzInputValidationType.password: // TODO: Implement password specific rules if any (e.g. length, complexity)
       case AppzInputValidationType.none:
-      default:
+      default: // Covers .none and any future unhandled validation types explicitly
         break;
     }
 
-    // Update internal error message state after the build phase
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
+      if (mounted && _internalErrorMessage != validationError) {
         setState(() {
           _internalErrorMessage = validationError;
         });
       }
     });
-
-    return validationError; // This is what TextFormField uses directly
+    return validationError;
   }
 
   @override
   Widget build(BuildContext context) {
-    // ... (existing build method code) ...
+    // These are temporary hardcoded styles, to be replaced by JSON config
+    const defaultBorderColor = Color(0xFFD7DBE0);
+    const focusedBorderColor = Color(0xFF6192F9); // Blue
+    const errorBorderColor = Color(0xFFE03333); // Red
+    const successBorderColor = Color(0xFF4CAF50); // Green (example)
+    const defaultBackgroundColor = Color(0xFFF3F4F6);
 
-    // Connect the validator
-    final textFormField = TextFormField(
-      // ... (other properties) ...
-      validator: _validate,
-      autovalidateMode: AutovalidateMode.onUserInteraction, // Or .disabled and validate manually
-      // ... (other properties) ...
+    const inputTextColor = Color(0xFF24272D); // Active input text
+    const labelTextColor = Color(0xFFB3BBC6); // Default label
+    const hintTextColor = Color(0xFFB3BBC6); // Default placeholder
+    const disabledTextColor = Color(0xFFB3BBC6);
+
+    const disabledBackgroundColor = Color(0xFFF3F4F6);
+    const disabledBorderColor = Color(0xFFE5E7EB);
+
+    bool isEnabled = widget.fieldState != AppzInputFieldState.disabled;
+
+    Color currentFillColor = defaultBackgroundColor;
+    Color currentHintColor = hintTextColor;
+    Color currentInputBorderColor = defaultBorderColor;
+    Color currentFocusedBorderColor = focusedBorderColor;
+    TextStyle currentInputTextStyle = const TextStyle(color: inputTextColor, fontSize: 14, fontWeight: FontWeight.w500);
+
+    if (!isEnabled) {
+      currentFillColor = disabledBackgroundColor;
+      currentHintColor = disabledTextColor;
+      currentInputBorderColor = disabledBorderColor;
+      currentFocusedBorderColor = disabledBorderColor;
+      currentInputTextStyle = const TextStyle(color: disabledTextColor, fontSize: 14, fontWeight: FontWeight.w500);
+    }
+
+    if (isEnabled) {
+      if (_hasError) {
+        currentInputBorderColor = errorBorderColor;
+        currentFocusedBorderColor = errorBorderColor;
+      } else if (widget.fieldState == AppzInputFieldState.success) {
+        currentInputBorderColor = successBorderColor;
+        currentFocusedBorderColor = successBorderColor;
+      } else if (widget.fieldState == AppzInputFieldState.focused) {
+        // currentInputBorderColor remains defaultBorderColor unless error/success
+        // currentFocusedBorderColor is already set to focusedBorderColor
+      }
+    }
+
+    final BorderSide defaultEnabledOutlineBorderSide = BorderSide(color: currentInputBorderColor, width: 1);
+
+    final inputDecoration = InputDecoration(
+      hintText: widget.hintText,
+      hintStyle: TextStyle(color: currentHintColor, fontSize: 14, fontWeight: FontWeight.w500),
+      filled: true,
+      fillColor: currentFillColor,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: defaultEnabledOutlineBorderSide,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: defaultEnabledOutlineBorderSide,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(
+          color: isEnabled ? currentFocusedBorderColor : disabledBorderColor,
+          width: 1.5
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: errorBorderColor, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: errorBorderColor, width: 1.5),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: disabledBorderColor, width: 1),
+      ),
+      prefixIcon: widget.prefixIcon,
+      suffixIcon: widget.suffixIcon,
     );
 
-    // Label style might also change based on disabled state, but for now, keep it consistent.
-    final labelText = widget.validationType == AppzInputValidationType.mandatory
+    final TextFormField textFormField = TextFormField(
+      controller: _internalController,
+      focusNode: _internalFocusNode,
+      keyboardType: _mapInputTypeToKeyboardType(widget.inputType),
+      textInputAction: widget.textInputAction,
+      obscureText: widget.obscureText || widget.inputType == AppzInputType.password,
+      maxLines: widget.inputType == AppzInputType.multiline ? null : 1,
+      minLines: widget.inputType == AppzInputType.multiline ? 3 : 1,
+      onChanged: widget.onChanged,
+      onTap: widget.onTap,
+      onFieldSubmitted: widget.onSubmitted,
+      enabled: isEnabled,
+      validator: _validate,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      style: currentInputTextStyle,
+      decoration: inputDecoration,
+    );
+
+    final String labelTextWithIndicator = widget.validationType == AppzInputValidationType.mandatory && widget.label.isNotEmpty
         ? '${widget.label}*'
         : widget.label;
-    final labelWidget = Text(
-      labelText,
+    final Text labelWidget = Text(
+      labelTextWithIndicator,
       style: const TextStyle(
-        color: labelTextColor, // Potentially: isEnabled ? labelTextColor : disabledTextColor,
-    // ... (rest of the build method) ...
+        color: labelTextColor,
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
+      ),
+    );
+
+    Widget fieldLayout;
+    if (widget.labelPosition == AppzInputLabelPosition.top) {
+      fieldLayout = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          labelWidget,
+          const SizedBox(height: 4),
+          textFormField,
+        ],
+      );
+    } else { // AppzInputLabelPosition.left
+      fieldLayout = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0, top: 12.0),
+            child: labelWidget,
+          ),
+          Expanded(child: textFormField),
+        ],
+      );
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        fieldLayout,
+        if (_effectiveErrorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0, left: 12.0),
+            child: Text(
+              _effectiveErrorMessage!,
+              style: const TextStyle(color: errorBorderColor, fontSize: 12),
+            ),
+          ),
+      ],
+    );
   }
 }
