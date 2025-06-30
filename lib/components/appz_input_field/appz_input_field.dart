@@ -210,6 +210,10 @@ class _AppzInputFieldState extends State<AppzInputField> {
     }
 
     // Determine the actual state to pass for styling, considering focus separately for border
+
+    // DEBUG PRINT:
+    print("DEBUG AppzInputField build: currentFieldState = $_currentFieldState, isEffectivelyDisabled = $_isEffectivelyDisabled, initialFieldState = ${widget.initialFieldState}, isFocused = $_isFocused, hasError = $_hasError, isFilled = $_isFilled, controllerText = '${_internalController.text}'");
+
     AppzFieldState stateForStyle = _currentFieldState;
     if (_isFocused && !_hasError && !_isEffectivelyDisabled) {
         // If focused without error/disabled, use 'focused' for style lookup
