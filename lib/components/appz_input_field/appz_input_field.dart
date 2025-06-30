@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // Required for TextInputFormatter
 import 'appz_input_field_enums.dart';
-import 'appz_style_config.dart'; // Will be used in the next step for styling
+import 'appz_style_config.dart';
+import 'formatters/aadhaar_input_formatter.dart'; // Import the formatter
 
 /// A versatile and themeable input field widget driven by JSON configuration.
 class AppzInputField extends StatefulWidget {
@@ -19,7 +21,9 @@ class AppzInputField extends StatefulWidget {
 
   final bool obscureText;
   final TextInputAction? textInputAction;
-  final int? maxLength;
+  final int? maxLength; // Used by defaultType, Aadhaar (for formatted length)
+  final int mpinLength; // Specific to mpinFieldType
+
   // Add other common TextFormField properties as needed:
   // final bool readOnly;
   // final InputDecoration? decoration; // We build this internally mostly
@@ -40,6 +44,7 @@ class AppzInputField extends StatefulWidget {
     this.obscureText = false,
     this.textInputAction,
     this.maxLength,
+    this.mpinLength = 4, // Default mpinLength to 4
     // this.readOnly = false,
   });
 
@@ -53,6 +58,10 @@ class _AppzInputFieldState extends State<AppzInputField> {
 
   AppzFieldState _currentFieldState = AppzFieldState.defaultState;
   String? _validationErrorMessage; // From internal or external validator
+
+  // MPIN specific state
+  late List<TextEditingController> _mpinSegmentControllers;
+  late List<FocusNode> _mpinSegmentFocusNodes;
 
   bool get _isEffectivelyDisabled => _currentFieldState == AppzFieldState.disabled;
   bool get _hasError => _currentFieldState == AppzFieldState.error;
@@ -78,7 +87,61 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (widget.initialFieldState == AppzFieldState.disabled) {
         _currentFieldState = AppzFieldState.disabled;
     }
+
+    _initializeMpinFields();
   }
+
+  void _initializeMpinFields() {
+    if (widget.fieldType == AppzFieldType.mpin) {
+      _mpinSegmentControllers = List.generate(
+        widget.mpinLength,
+        (index) => TextEditingController(),
+      );
+      _mpinSegmentFocusNodes = List.generate(
+        widget.mpinLength,
+        (index) => FocusNode(),
+      );
+      // Add listeners to MPIN segment controllers for focus and value aggregation
+      for (int i = 0; i < widget.mpinLength; i++) {
+        _mpinSegmentControllers[i].addListener(() => _onMpinSegmentChanged(i));
+        // We might need to add focus listeners to segments too for backspace logic
+      }
+    } else {
+      // Ensure lists are empty or null if not MPIN type to avoid issues.
+      // Or handle this by only accessing them if fieldType is mpin.
+      _mpinSegmentControllers = [];
+      _mpinSegmentFocusNodes = [];
+    }
+  }
+
+  void _disposeMpinFields() {
+    if (widget.fieldType == AppzFieldType.mpin || _mpinSegmentControllers.isNotEmpty) { // check _mpinSegmentControllers for safety during hot reload if type changes
+      for (var controller in _mpinSegmentControllers) {
+        controller.dispose();
+      }
+      for (var focusNode in _mpinSegmentFocusNodes) {
+        focusNode.dispose();
+      }
+    }
+  }
+
+  // This will be called by individual mpin segment listeners
+  void _onMpinSegmentChanged(int segmentIndex) {
+    // Logic to handle focus change and aggregate value
+    // This will be fleshed out more later.
+
+    // Update the main controller
+    final mpinValue = _mpinSegmentControllers.map((c) => c.text).join();
+    if (_internalController.text != mpinValue) {
+      _internalController.text = mpinValue; // This will trigger its own listeners (like _handleTextChange)
+    }
+
+    // Auto-focus next field
+    if (segmentIndex < widget.mpinLength - 1 && _mpinSegmentControllers[segmentIndex].text.isNotEmpty) {
+      FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[segmentIndex + 1]);
+    }
+  }
+
 
   @override
   void didUpdateWidget(covariant AppzInputField oldWidget) {
@@ -94,14 +157,24 @@ class _AppzInputFieldState extends State<AppzInputField> {
       _internalFocusNode.addListener(_handleFocusChange);
     }
     if (widget.initialFieldState != oldWidget.initialFieldState && widget.initialFieldState != _currentFieldState) {
-        // Allow external state changes to override, unless it's about focus/filled which are more dynamic
         if(widget.initialFieldState == AppzFieldState.disabled || widget.initialFieldState == AppzFieldState.error) {
             _updateState(widget.initialFieldState);
         }
     }
-     if (widget.initialValue != oldWidget.initialValue && widget.controller == null) {
+    if (widget.initialValue != oldWidget.initialValue && widget.controller == null) {
       _internalController.text = widget.initialValue ?? '';
-      // _handleTextChange will be called by the listener
+    }
+
+    // Re-initialize MPIN fields if fieldType or mpinLength changes
+    if (widget.fieldType == AppzFieldType.mpin &&
+        (oldWidget.fieldType != AppzFieldType.mpin || widget.mpinLength != oldWidget.mpinLength)) {
+      _disposeMpinFields(); // Dispose old ones first
+      _initializeMpinFields();
+    } else if (widget.fieldType != AppzFieldType.mpin && oldWidget.fieldType == AppzFieldType.mpin) {
+      _disposeMpinFields(); // Clean up if switched away from MPIN
+       // Ensure lists are empty if not MPIN type
+      _mpinSegmentControllers = [];
+      _mpinSegmentFocusNodes = [];
     }
   }
 
@@ -196,6 +269,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (widget.focusNode == null) {
       _internalFocusNode.dispose();
     }
+    _disposeMpinFields(); // Dispose MPIN fields
     super.dispose();
   }
 
@@ -306,9 +380,209 @@ class _AppzInputFieldState extends State<AppzInputField> {
     } else {
       // Placeholder for other field types
       fieldWidget = Text('Unsupported field type: ${widget.fieldType.name}');
+    } else if (widget.fieldType == AppzFieldType.mobile) {
+      const String countryCodePrefix = "+91"; // For now, hardcoded
+
+      final prefixWidget = Padding(
+        padding: EdgeInsets.only(
+          left: style.paddingHorizontal,
+          right: style.paddingHorizontal / 2, // Some spacing between prefix and input
+          top: style.paddingVertical,
+          bottom: style.paddingVertical
+        ),
+        child: Text(
+          countryCodePrefix,
+          style: TextStyle(
+            color: style.textColor, // Or a specific prefix color from config
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+          ),
+        ),
+      );
+
+      // Adjust contentPadding for the TextFormField as prefix is now separate
+      final mobileInputDecoration = inputDecoration.copyWith(
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: style.paddingHorizontal / 2, // Reduced left padding
+          vertical: style.paddingVertical
+        ),
+        prefixIcon: prefixWidget, // Using prefixIcon to place the text
+        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0), // To make prefix text compact
+      );
+
+      // For mobile, we effectively use a subset of the full decoration for the inner TextFormField
+      // The outer container (if we add one) would have the main border.
+      // For now, let's make the TextFormField itself have the border.
+
+      final mobileTextFormField = TextFormField(
+        controller: _internalController,
+        focusNode: _internalFocusNode,
+        decoration: mobileInputDecoration,
+        style: TextStyle(
+          color: style.textColor,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+        ),
+        keyboardType: TextInputType.phone,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          LengthLimitingTextInputFormatter(10), // 10 digits for the number part
+        ],
+        validator: (value) {
+          // Chain with general validator if present
+          String? externalValidationError;
+          if (widget.validator != null) {
+            externalValidationError = widget.validator!(value);
+            if (externalValidationError != null) return externalValidationError;
+          }
+          // Mobile specific validation
+          if (value == null || value.isEmpty) {
+            if (widget.validationType == AppzInputValidationType.mandatory) { // Check if mandatory is set
+                 return 'Mobile number is required.'; // TODO: Localize
+            }
+            return null; // Not mandatory and empty is fine
+          }
+          if (value.length != 10) {
+            return 'Mobile number must be 10 digits.'; // TODO: Localize
+          }
+          return null;
+        },
+        onTap: widget.onTap,
+        onFieldSubmitted: widget.onSubmitted,
+        obscureText: widget.obscureText, // Unlikely for mobile, but respect it
+        textInputAction: widget.textInputAction,
+        enabled: !_isEffectivelyDisabled,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+      );
+      fieldWidget = mobileTextFormField; // For now, just the TextFormField itself
+      // Later, this might be wrapped in a custom container to draw a shared border if prefix is truly outside
+    } else if (widget.fieldType == AppzFieldType.aadhaar) {
+      final aadhaarTextFormField = TextFormField(
+        controller: _internalController,
+        focusNode: _internalFocusNode,
+        decoration: inputDecoration.copyWith( // Reuse default inputDecoration, can customize if needed
+            hintText: widget.hintText ?? "XXXX XXXX XXXX", // Aadhaar specific hint
+        ),
+        style: TextStyle(
+          color: style.textColor,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+        ),
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          AadhaarInputFormatter(), // Custom formatter for XXXX XXXX XXXX
+          LengthLimitingTextInputFormatter(14), // 12 digits + 2 spaces
+        ],
+        validator: (value) {
+          String? externalValidationError;
+          if (widget.validator != null) {
+            externalValidationError = widget.validator!(value);
+            if (externalValidationError != null) return externalValidationError;
+          }
+          // Aadhaar specific validation
+          final unformattedValue = value?.replaceAll(' ', '') ?? '';
+          if (unformattedValue.isEmpty) {
+             if (widget.validationType == AppzInputValidationType.mandatory) {
+                 return 'Aadhaar number is required.'; // TODO: Localize
+            }
+            return null;
+          }
+          if (unformattedValue.length != 12) {
+            return 'Aadhaar number must be 12 digits.'; // TODO: Localize
+          }
+          // Potentially add checksum validation here in the future
+          return null;
+        },
+        onTap: widget.onTap,
+        onFieldSubmitted: widget.onSubmitted,
+        textInputAction: widget.textInputAction,
+        enabled: !_isEffectivelyDisabled,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+      );
+      fieldWidget = aadhaarTextFormField;
+    } else if (widget.fieldType == AppzFieldType.mpin) {
+      // TODO: Potentially get mpin specific styles from AppzStyleConfig
+      // e.g. segmentSpacing, segmentBorderColor, segmentBackgroundColor etc.
+      // For now, using general 'style' for some aspects.
+
+      fieldWidget = Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Or MainAxisAlignment.start with Spacers
+        children: List.generate(widget.mpinLength, (index) {
+          return SizedBox(
+            width: 48, // TODO: Make this configurable via AppzStyleConfig
+            height: 52, // TODO: Make this configurable via AppzStyleConfig
+            child: TextFormField(
+              controller: _mpinSegmentControllers[index],
+              focusNode: _mpinSegmentFocusNodes[index],
+              enabled: !_isEffectivelyDisabled,
+              textAlign: TextAlign.center,
+              maxLength: 1,
+              obscureText: widget.obscureText,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              style: TextStyle(
+                color: style.textColor,
+                fontFamily: style.fontFamily,
+                fontSize: style.fontSize + 4, // Larger font for single digit
+                fontWeight: FontWeight.bold,
+              ),
+              decoration: InputDecoration(
+                counterText: "", // Hide the maxLength counter
+                contentPadding: EdgeInsets.zero, // Adjust padding for centering
+                filled: true,
+                fillColor: style.backgroundColor,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5), // Smaller radius for segments
+                  borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+                  borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+                  borderSide: BorderSide(
+                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
+                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
+                  ),
+                ),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+                  borderSide: BorderSide(
+                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderColor,
+                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderWidth,
+                  ),
+                ),
+                errorBorder: OutlineInputBorder( // Basic error indication for segments
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+                  borderSide: BorderSide(
+                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
+                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth,
+                  ),
+                ),
+                 focusedErrorBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+                  borderSide: BorderSide(
+                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
+                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth + 0.5,
+                  ),
+                ),
+              ),
+              onChanged: (value) {
+                // _onMpinSegmentChanged(index) is already listening to controller
+                // This onChanged is for additional logic if needed, like backspace handling
+                if (value.isEmpty && index > 0) {
+                  FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[index - 1]);
+                }
+              },
+            ),
+          );
+        }),
+      );
     }
 
-    final String labelTextWithIndicator = widget.label; // Mandatory indicator logic can be added here if needed for specific types
+    final String labelTextWithIndicator = widget.label; // Mandatory indicator logic can be added here
     final Text labelWidget = Text(
       labelTextWithIndicator,
       style: TextStyle(
