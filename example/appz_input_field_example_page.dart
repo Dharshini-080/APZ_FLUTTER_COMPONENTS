@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+// Adjust path if your project structure is different for the imports below
 import '../lib/components/appz_input_field/appz_input_field.dart';
-import '../lib/components/appz_input_field/appz_input_field_theme.dart';
+import '../lib/components/appz_input_field/appz_input_field_enums.dart';
+// AppzStyleConfig is used internally by AppzInputField, direct import not always needed for usage.
 
 class AppzInputFieldExamplePage extends StatefulWidget {
   const AppzInputFieldExamplePage({super.key});
@@ -10,22 +12,32 @@ class AppzInputFieldExamplePage extends StatefulWidget {
 }
 
 class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _disabledController = TextEditingController(text: "Disabled Text");
-  final TextEditingController _leftLabelController = TextEditingController();
-   final TextEditingController _amountController = TextEditingController();
+  final _defaultController = TextEditingController();
+  final _filledController = TextEditingController(text: "Already Filled");
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _disabledController = TextEditingController(text: "Disabled Text");
+  final _errorController = TextEditingController();
 
+  final _formKey = GlobalKey<FormState>();
 
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  @override
+  void dispose() {
+    _defaultController.dispose();
+    _filledController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _disabledController.dispose();
+    _errorController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AppzInputField Examples'),
-        backgroundColor: Colors.blueGrey,
+        title: const Text('AppzInputField (defaultType) Examples'),
+        // backgroundColor: Colors.teal, // Example theming
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
@@ -34,61 +46,55 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              const Text("Basic Input (Label Top):", style: TextStyle(fontWeight: FontWeight.bold)),
-              AppzInputField(
-                label: 'Name',
-                hintText: 'Enter your name',
-                controller: _nameController,
-                validationType: AppzInputValidationType.mandatory,
+              const Text(
+                "Note: Styling is driven by assets/ui_config.json.\n"
+                "To test fallback styles, temporarily rename or corrupt ui_config.json and hot restart.",
+                style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
               ),
               const SizedBox(height: 20),
 
-              const Text("Email Input (Mandatory):", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Default State (Interactive):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Your Name',
+                hintText: 'Enter your full name',
+                controller: _defaultController,
+                fieldType: AppzFieldType.defaultType, // Explicitly defaultType
+                // validator: (value) => (value == null || value.isEmpty) ? 'Name is required.' : null,
+              ),
+              const SizedBox(height: 20),
+
+              const Text("Filled State (Pre-filled):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Company',
+                controller: _filledController,
+                fieldType: AppzFieldType.defaultType,
+                // initialFieldState: AppzFieldState.filled, // State is derived, but can be forced
+              ),
+              const SizedBox(height: 20),
+
+              const Text("Email (Focus to see focused style):", style: TextStyle(fontWeight: FontWeight.bold)),
               AppzInputField(
                 label: 'Email Address',
                 hintText: 'you@example.com',
                 controller: _emailController,
-                inputType: AppzInputType.emailAddress,
-                validationType: AppzInputValidationType.email, // Also implies mandatory via current logic if empty
-                 // Forcing mandatory check as well
+                fieldType: AppzFieldType.defaultType, // Using defaultType for email input
+                // inputType: AppzInputType.emailAddress, // This was from previous version, now handled by fieldType specific logic if needed
                 validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Email field cannot be empty.';
-                  }
-                  // Basic email regex check is inside AppzInputField for AppzInputValidationType.email
-                  // This custom validator just adds the mandatory check on top.
+                  if (value == null || value.isEmpty) return 'Email is required.';
+                  if (!value.contains('@')) return 'Enter a valid email.';
                   return null;
                 },
               ),
               const SizedBox(height: 20),
 
-              const Text("Password Input:", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Password (Obscured, Error on Empty Submit):", style: TextStyle(fontWeight: FontWeight.bold)),
               AppzInputField(
                 label: 'Password',
                 hintText: 'Enter your password',
                 controller: _passwordController,
-                inputType: AppzInputType.password, // or obscureText: true
-                validationType: AppzInputValidationType.mandatory, // Example: password is mandatory
-                suffixIcon: Icon(Icons.visibility_off), // Example suffix
-              ),
-              const SizedBox(height: 20),
-
-              const Text("Input with Prefix Icon & Label Left:", style: TextStyle(fontWeight: FontWeight.bold)),
-              AppzInputField(
-                label: 'Amount',
-                hintText: '0.00',
-                controller: _amountController,
-                inputType: AppzInputType.number, // Or .amount when fully implemented
-                labelPosition: AppzInputLabelPosition.left,
-                prefixIcon: Icon(Icons.attach_money),
-                validationType: AppzInputValidationType.amount,
-                 validator: (value) {
-                  if (value == null || value.isEmpty) return 'Amount is required.';
-                  final number = double.tryParse(value);
-                  if (number == null) return 'Invalid number.';
-                  if (number < 0) return 'Amount cannot be negative.';
-                  return null;
-                }
+                fieldType: AppzFieldType.defaultType,
+                obscureText: true,
+                validator: (value) => (value == null || value.isEmpty) ? 'Password cannot be empty.' : null,
               ),
               const SizedBox(height: 20),
 
@@ -96,30 +102,31 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
               AppzInputField(
                 label: 'Disabled Field',
                 controller: _disabledController,
-                fieldState: AppzInputFieldState.disabled,
+                fieldType: AppzFieldType.defaultType,
+                initialFieldState: AppzFieldState.disabled, // Forcing disabled state
               ),
               const SizedBox(height: 20),
 
-              const Text("Error State Input (External Error):", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("Error State (Forced via initialFieldState & validator):", style: TextStyle(fontWeight: FontWeight.bold)),
               AppzInputField(
-                label: 'Field with Error',
-                hintText: 'Try submitting without value',
-                // fieldState: AppzInputFieldState.error, // Can be set externally
-                errorMessage: "This is an external error message.", // Or trigger via validator
-                 validationType: AppzInputValidationType.mandatory,
+                label: 'Field with Initial Error',
+                hintText: 'This field has an error',
+                controller: _errorController,
+                fieldType: AppzFieldType.defaultType,
+                initialFieldState: AppzFieldState.error, // Forcing error state appearance initially
+                validator: (value) => 'This is a validation error message.', // Ensures error state persists
               ),
               const SizedBox(height: 30),
 
               ElevatedButton(
                 onPressed: () {
                   if (_formKey.currentState!.validate()) {
-                    // Process data
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Form is valid!')),
+                      const SnackBar(content: Text('Form is valid! Processing...')),
                     );
                   } else {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Form has errors.')),
+                      const SnackBar(content: Text('Form has errors. Please correct them.')),
                     );
                   }
                 },
@@ -130,16 +137,5 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _nameController.dispose();
-    _disabledController.dispose();
-    _leftLabelController.dispose();
-    _amountController.dispose();
-    super.dispose();
   }
 }

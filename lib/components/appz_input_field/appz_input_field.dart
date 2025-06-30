@@ -1,97 +1,46 @@
 import 'package:flutter/material.dart';
-import 'appz_input_field_theme.dart'; // Importing enums
+import 'appz_input_field_enums.dart';
+import 'appz_style_config.dart'; // Will be used in the next step for styling
 
-/// A versatile and themeable input field widget.
-///
-/// `AppzInputField` provides a customizable text input experience, supporting
-/// various appearances, states, label positions, validation types, and input modes.
-/// Its visual properties can be configured via a JSON file.
+/// A versatile and themeable input field widget driven by JSON configuration.
 class AppzInputField extends StatefulWidget {
-  /// The controller for editing the text.
-  final TextEditingController? controller;
-
-  /// The text to display as the label for the input field.
   final String label;
-
-  /// Optional hint text to display inside the input field when it's empty.
   final String? hintText;
+  final TextEditingController? controller;
+  final AppzFieldType fieldType;
+  final AppzFieldState initialFieldState; // Can be used to force a state externally
+  final String? initialValue; // Used if controller is not provided
 
-  /// The visual appearance style of the input field.
-  /// Defaults to [AppzInputFieldAppearance.primary].
-  final AppzInputFieldAppearance appearance;
-
-  /// The current interactive or validation state of the field.
-  /// This can be set externally or managed internally based on validation.
-  /// Defaults to [AppzInputFieldState.defaultState].
-  final AppzInputFieldState fieldState; // TODO: Revisit how this interacts with internal state
-
-  /// The positioning of the label relative to the input field.
-  /// Defaults to [AppzInputLabelPosition.top].
-  final AppzInputLabelPosition labelPosition;
-
-  /// The type of validation to be applied.
-  /// Defaults to [AppzInputValidationType.none].
-  final AppzInputValidationType validationType;
-
-  /// The type of input, influencing keyboard and basic formatting.
-  /// Defaults to [AppzInputType.text].
-  final AppzInputType inputType;
-
-  /// The focus node for managing the field's focus.
   final FocusNode? focusNode;
-
-  /// Callback when the text in the field changes.
   final ValueChanged<String>? onChanged;
-
-  /// Callback when the user submits the field (e.g., presses "done" on the keyboard).
-  final ValueChanged<String>? onSubmitted;
-
-  /// Callback when the input field is tapped.
   final VoidCallback? onTap;
-
-  /// Whether to obscure the text being entered (e.g., for passwords).
-  /// Defaults to `false`.
-  final bool obscureText;
-
-  /// An optional error message to display below the field.
-  /// This can be used to show errors from external validation sources.
-  /// If provided, it may override internal validation messages depending on implementation.
-  final String? errorMessage;
-
-  /// An optional widget to display before the input area.
-  final Widget? prefixIcon;
-
-  /// An optional widget to display after the input area.
-  final Widget? suffixIcon;
-
-  /// The type of action button to use for the keyboard.
-  final TextInputAction? textInputAction;
-
-  /// An optional custom validator function.
-  /// If provided, this can work in conjunction with or override internal validation.
+  final ValueChanged<String>? onSubmitted;
   final FormFieldValidator<String>? validator;
 
-  /// Creates an AppzInputField.
+  final bool obscureText;
+  final TextInputAction? textInputAction;
+  final int? maxLength;
+  // Add other common TextFormField properties as needed:
+  // final bool readOnly;
+  // final InputDecoration? decoration; // We build this internally mostly
+
   const AppzInputField({
     super.key,
-    this.controller,
     required this.label,
     this.hintText,
-    this.appearance = AppzInputFieldAppearance.primary,
-    this.fieldState = AppzInputFieldState.defaultState,
-    this.labelPosition = AppzInputLabelPosition.top,
-    this.validationType = AppzInputValidationType.none,
-    this.inputType = AppzInputType.text,
+    this.controller,
+    this.fieldType = AppzFieldType.defaultType,
+    this.initialFieldState = AppzFieldState.defaultState,
+    this.initialValue,
     this.focusNode,
     this.onChanged,
-    this.onSubmitted,
     this.onTap,
-    this.obscureText = false,
-    this.errorMessage,
-    this.prefixIcon,
-    this.suffixIcon,
-    this.textInputAction,
+    this.onSubmitted,
     this.validator,
+    this.obscureText = false,
+    this.textInputAction,
+    this.maxLength,
+    // this.readOnly = false,
   });
 
   @override
@@ -102,30 +51,144 @@ class _AppzInputFieldState extends State<AppzInputField> {
   late final TextEditingController _internalController;
   late final FocusNode _internalFocusNode;
 
-  String? _internalErrorMessage;
+  AppzFieldState _currentFieldState = AppzFieldState.defaultState;
+  String? _validationErrorMessage; // From internal or external validator
 
-  bool get _hasError => _internalErrorMessage != null || widget.errorMessage != null;
-  String? get _effectiveErrorMessage => widget.errorMessage ?? _internalErrorMessage;
+  bool get _isEffectivelyDisabled => _currentFieldState == AppzFieldState.disabled;
+  bool get _hasError => _currentFieldState == AppzFieldState.error;
+  bool get _isFocused => _currentFieldState == AppzFieldState.focused;
+  bool get _isFilled => _currentFieldState == AppzFieldState.filled || _internalController.text.isNotEmpty;
+
 
   @override
   void initState() {
     super.initState();
-    _internalController = widget.controller ?? TextEditingController();
+
+    _internalController = widget.controller ?? TextEditingController(text: widget.initialValue);
     _internalFocusNode = widget.focusNode ?? FocusNode();
 
-    // TODO: Add listener to focus node to update internal state if needed (e.g. for focused style)
-    // _internalFocusNode.addListener(_onFocusChange);
+    _currentFieldState = widget.initialFieldState;
+
+    // Add listeners to update state
+    _internalFocusNode.addListener(_handleFocusChange);
+    _internalController.addListener(_handleTextChange);
+
+    // Initial check for filled state if there's initial text or state
+    _updateFilledState();
+    if (widget.initialFieldState == AppzFieldState.disabled) {
+        _currentFieldState = AppzFieldState.disabled;
+    }
   }
 
-  // void _onFocusChange() {
-  //   setState(() {
-  //     // This can be used to trigger style changes based on focus
-  //     // For now, fieldState.focused will primarily drive this
-  //   });
-  // }
+  @override
+  void didUpdateWidget(covariant AppzInputField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.controller != oldWidget.controller) {
+      _internalController.removeListener(_handleTextChange);
+      _internalController = widget.controller ?? TextEditingController(text: widget.initialValue ?? _internalController.text);
+      _internalController.addListener(_handleTextChange);
+    }
+    if (widget.focusNode != oldWidget.focusNode) {
+      _internalFocusNode.removeListener(_handleFocusChange);
+      _internalFocusNode = widget.focusNode ?? FocusNode();
+      _internalFocusNode.addListener(_handleFocusChange);
+    }
+    if (widget.initialFieldState != oldWidget.initialFieldState && widget.initialFieldState != _currentFieldState) {
+        // Allow external state changes to override, unless it's about focus/filled which are more dynamic
+        if(widget.initialFieldState == AppzFieldState.disabled || widget.initialFieldState == AppzFieldState.error) {
+            _updateState(widget.initialFieldState);
+        }
+    }
+     if (widget.initialValue != oldWidget.initialValue && widget.controller == null) {
+      _internalController.text = widget.initialValue ?? '';
+      // _handleTextChange will be called by the listener
+    }
+  }
+
+
+  void _handleFocusChange() {
+    if (_isEffectivelyDisabled) return; // Don't change focus state if disabled
+
+    if (_internalFocusNode.hasFocus) {
+      _updateState(AppzFieldState.focused);
+    } else {
+      // When losing focus, if not error, determine if it's filled or default
+      if (!_hasError) {
+        _updateState(_internalController.text.isNotEmpty ? AppzFieldState.filled : AppzFieldState.defaultState);
+      }
+      // If it has an error, it should remain in error state on blur
+    }
+  }
+
+  void _handleTextChange() {
+    if (_isEffectivelyDisabled) return;
+
+    // Call external onChanged if provided
+    widget.onChanged?.call(_internalController.text);
+
+    _updateFilledState();
+  }
+
+  void _updateFilledState() {
+    if (_isEffectivelyDisabled || _isFocused || _hasError) {
+        // Don't change to 'filled' if it's focused, has an error, or is disabled.
+        // These states take precedence.
+        // However, if it becomes empty while focused/error, it might revert to that state's "empty" look.
+        // The 'filled' state is more about the look when it's NOT focused and NOT error.
+        // We also need to ensure that if it was 'filled' and text is deleted, it goes back to 'default' (if not focused/error).
+         if (!_isFocused && !_hasError && _internalController.text.isEmpty && _currentFieldState == AppzFieldState.filled) {
+            _updateState(AppzFieldState.defaultState);
+        }
+        return;
+    }
+
+    final bool hasText = _internalController.text.isNotEmpty;
+    if (hasText && _currentFieldState != AppzFieldState.filled) {
+      _updateState(AppzFieldState.filled);
+    } else if (!hasText && _currentFieldState == AppzFieldState.filled) {
+      _updateState(AppzFieldState.defaultState);
+    }
+  }
+
+  // Public method to update state if needed (e.g., after validation)
+  void _updateState(AppzFieldState newState, {String? errorMessage}) {
+    if (_currentFieldState != newState || _validationErrorMessage != errorMessage) {
+      if (mounted) {
+        setState(() {
+          _currentFieldState = newState;
+          if (errorMessage != null || newState != AppzFieldState.error) {
+            // Clear error if new state is not error, or set new error message
+            _validationErrorMessage = (newState == AppzFieldState.error) ? errorMessage : null;
+          }
+        });
+      }
+    }
+  }
+
+  String? _performValidation(String? value) {
+    _validationErrorMessage = null; // Clear previous internal error
+    if (widget.validator != null) {
+      _validationErrorMessage = widget.validator!(value);
+    }
+    // Update state based on validation result
+    if (_validationErrorMessage != null) {
+      _updateState(AppzFieldState.error, errorMessage: _validationErrorMessage);
+    } else if (!_isFocused) {
+      // If valid and not focused, set to filled or default
+      _updateState(_internalController.text.isNotEmpty ? AppzFieldState.filled : AppzFieldState.defaultState);
+    } else if (_isFocused) {
+      // If valid and focused, remain in focused state.
+      _updateState(AppzFieldState.focused);
+    }
+    return _validationErrorMessage;
+  }
+
 
   @override
   void dispose() {
+    _internalFocusNode.removeListener(_handleFocusChange);
+    _internalController.removeListener(_handleTextChange);
+
     // Only dispose if they were created internally
     if (widget.controller == null) {
       _internalController.dispose();
@@ -133,246 +196,144 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (widget.focusNode == null) {
       _internalFocusNode.dispose();
     }
-    // _internalFocusNode.removeListener(_onFocusChange);
     super.dispose();
-  }
-
-  TextInputType _mapInputTypeToKeyboardType(AppzInputType inputType) {
-    switch (inputType) {
-      case AppzInputType.text:
-        return TextInputType.text;
-      case AppzInputType.multiline:
-        return TextInputType.multiline;
-      case AppzInputType.number:
-        return TextInputType.number;
-      case AppzInputType.phone:
-        return TextInputType.phone;
-      case AppzInputType.emailAddress:
-        return TextInputType.emailAddress;
-      case AppzInputType.url:
-        return TextInputType.url;
-      case AppzInputType.password:
-        return TextInputType.visiblePassword; // TextFormField handles obscuring
-      case AppzInputType.date:
-      case AppzInputType.dateTime: // Both map to datetime for keyboard
-        return TextInputType.datetime;
-      // No default needed as all enum values are covered.
-      // Dart analyzer will warn if a new enum value is added and not handled.
-    }
-  }
-
-  String? _validate(String? value) {
-    // Priority to external validator if provided
-    if (widget.validator != null) {
-      final externalValidationError = widget.validator!(value);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _internalErrorMessage != externalValidationError) {
-          setState(() {
-            _internalErrorMessage = externalValidationError;
-          });
-        }
-      });
-      return externalValidationError;
-    }
-
-    String? validationError;
-    final trimmedValue = value?.trim() ?? '';
-
-    switch (widget.validationType) {
-      case AppzInputValidationType.mandatory:
-        if (trimmedValue.isEmpty) {
-          validationError = 'This field is required.'; // TODO: Localize
-        }
-        break;
-      case AppzInputValidationType.email:
-        if (trimmedValue.isNotEmpty) {
-          final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
-          if (!emailRegex.hasMatch(trimmedValue)) {
-            validationError = 'Enter a valid email address.'; // TODO: Localize
-          }
-        }
-        break;
-      case AppzInputValidationType.numeric:
-        if (trimmedValue.isNotEmpty && double.tryParse(trimmedValue) == null) {
-            validationError = 'Enter a valid number.'; // TODO: Localize
-        }
-        break;
-      case AppzInputValidationType.amount:
-        if (trimmedValue.isNotEmpty) {
-            final number = double.tryParse(trimmedValue);
-            if (number == null) {
-                validationError = 'Enter a valid amount.'; // TODO: Localize
-            } else if (number < 0) {
-                // validationError = 'Amount cannot be negative.'; // Example specific rule for future
-            }
-        }
-        break;
-      case AppzInputValidationType.password: // TODO: Implement password specific rules if any (e.g. length, complexity)
-      case AppzInputValidationType.none:
-      default: // Covers .none and any future unhandled validation types explicitly
-        break;
-    }
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _internalErrorMessage != validationError) {
-        setState(() {
-          _internalErrorMessage = validationError;
-        });
-      }
-    });
-    return validationError;
   }
 
   @override
   Widget build(BuildContext context) {
-    // These are temporary hardcoded styles, to be replaced by JSON config
-    const defaultBorderColor = Color(0xFFD7DBE0);
-    const focusedBorderColor = Color(0xFF6192F9); // Blue
-    const errorBorderColor = Color(0xFFE03333); // Red
-    const successBorderColor = Color(0xFF4CAF50); // Green (example)
-    const defaultBackgroundColor = Color(0xFFF3F4F6);
+    // This is where the UI rendering based on widget.fieldType will happen.
+    // Styling will be fetched from AppzStyleConfig.instance using _currentFieldState and _isFilled.
 
-    const inputTextColor = Color(0xFF24272D); // Active input text
-    const labelTextColor = Color(0xFFB3BBC6); // Default label
-    const hintTextColor = Color(0xFFB3BBC6); // Default placeholder
-    const disabledTextColor = Color(0xFFB3BBC6);
-
-    const disabledBackgroundColor = Color(0xFFF3F4F6);
-    const disabledBorderColor = Color(0xFFE5E7EB);
-
-    bool isEnabled = widget.fieldState != AppzInputFieldState.disabled;
-
-    Color currentFillColor = defaultBackgroundColor;
-    Color currentHintColor = hintTextColor;
-    Color currentInputBorderColor = defaultBorderColor;
-    Color currentFocusedBorderColor = focusedBorderColor;
-    TextStyle currentInputTextStyle = const TextStyle(color: inputTextColor, fontSize: 14, fontWeight: FontWeight.w500);
-
-    if (!isEnabled) {
-      currentFillColor = disabledBackgroundColor;
-      currentHintColor = disabledTextColor;
-      currentInputBorderColor = disabledBorderColor;
-      currentFocusedBorderColor = disabledBorderColor;
-      currentInputTextStyle = const TextStyle(color: disabledTextColor, fontSize: 14, fontWeight: FontWeight.w500);
+    if (!AppzStyleConfig.instance.isInitialized) {
+      // Styles not loaded, show a basic placeholder or loading state
+      return const Center(child: Text("Styles loading or failed..."));
     }
 
-    if (isEnabled) {
-      if (_hasError) {
-        currentInputBorderColor = errorBorderColor;
-        currentFocusedBorderColor = errorBorderColor;
-      } else if (widget.fieldState == AppzInputFieldState.success) {
-        currentInputBorderColor = successBorderColor;
-        currentFocusedBorderColor = successBorderColor;
-      } else if (widget.fieldState == AppzInputFieldState.focused) {
-        // currentInputBorderColor remains defaultBorderColor unless error/success
-        // currentFocusedBorderColor is already set to focusedBorderColor
-      }
-    }
+    // Determine the actual state to pass for styling, considering focus separately for border
+    AppzFieldState stateForStyle = _currentFieldState;
+    if (_isFocused && !_hasError && !_isEffectivelyDisabled) {
+        // If focused without error/disabled, use 'focused' for style lookup
+        // but 'filled' status is still relevant for other aspects like background.
+        stateForStyle = AppzFieldState.focused;
+    } else if (_hasError && !_isEffectivelyDisabled) {
+        stateForStyle = AppzFieldState.error;
+    } else if (_isEffectivelyDisabled) {
+        stateForStyle = AppzFieldState.disabled;
+    } // 'filled' and 'default' are handled by getStyleForState via _isFilled
 
-    final BorderSide defaultEnabledOutlineBorderSide = BorderSide(color: currentInputBorderColor, width: 1);
+    final AppzStateStyle style = AppzStyleConfig.instance.getStyleForState(stateForStyle, isFilled: _isFilled);
 
-    final inputDecoration = InputDecoration(
-      hintText: widget.hintText,
-      hintStyle: TextStyle(color: currentHintColor, fontSize: 14, fontWeight: FontWeight.w500),
-      filled: true,
-      fillColor: currentFillColor,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: defaultEnabledOutlineBorderSide,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: defaultEnabledOutlineBorderSide,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(
-          color: isEnabled ? currentFocusedBorderColor : disabledBorderColor,
-          width: 1.5
+    Widget fieldWidget;
+
+    if (widget.fieldType == AppzFieldType.defaultType) {
+      final inputDecoration = InputDecoration(
+        hintText: widget.hintText,
+        hintStyle: TextStyle(
+          color: style.textColor.withOpacity(0.5), // Example: hint is less prominent
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
         ),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: errorBorderColor, width: 1),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: errorBorderColor, width: 1.5),
-      ),
-      disabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: disabledBorderColor, width: 1),
-      ),
-      prefixIcon: widget.prefixIcon,
-      suffixIcon: widget.suffixIcon,
-    );
+        filled: true,
+        fillColor: style.backgroundColor,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: style.paddingHorizontal,
+          vertical: style.paddingVertical,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor, // Always use focused border color
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor, // Error border color even when focused
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth + 0.5, // Slightly thicker
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        // prefixIcon: widget.prefixIcon, // Will add these later if part of defaultType
+        // suffixIcon: widget.suffixIcon,
+      );
 
-    final TextFormField textFormField = TextFormField(
-      controller: _internalController,
-      focusNode: _internalFocusNode,
-      keyboardType: _mapInputTypeToKeyboardType(widget.inputType),
-      textInputAction: widget.textInputAction,
-      obscureText: widget.obscureText || widget.inputType == AppzInputType.password,
-      maxLines: widget.inputType == AppzInputType.multiline ? null : 1,
-      minLines: widget.inputType == AppzInputType.multiline ? 3 : 1,
-      onChanged: widget.onChanged,
-      onTap: widget.onTap,
-      onFieldSubmitted: widget.onSubmitted,
-      enabled: isEnabled,
-      validator: _validate,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      style: currentInputTextStyle,
-      decoration: inputDecoration,
-    );
+      final textFormField = TextFormField(
+        controller: _internalController,
+        focusNode: _internalFocusNode,
+        decoration: inputDecoration,
+        style: TextStyle(
+          color: style.textColor,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+        ),
+        validator: _performValidation,
+        onTap: widget.onTap,
+        onFieldSubmitted: widget.onSubmitted,
+        obscureText: widget.obscureText,
+        textInputAction: widget.textInputAction,
+        maxLength: widget.maxLength,
+        enabled: !_isEffectivelyDisabled,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        // keyboardType: _mapInputTypeToKeyboardType(widget.inputType), // Assuming defaultType uses text keyboard
+      );
+      fieldWidget = textFormField;
+    } else {
+      // Placeholder for other field types
+      fieldWidget = Text('Unsupported field type: ${widget.fieldType.name}');
+    }
 
-    final String labelTextWithIndicator = widget.validationType == AppzInputValidationType.mandatory && widget.label.isNotEmpty
-        ? '${widget.label}*'
-        : widget.label;
+    final String labelTextWithIndicator = widget.label; // Mandatory indicator logic can be added here if needed for specific types
     final Text labelWidget = Text(
       labelTextWithIndicator,
-      style: const TextStyle(
-        color: labelTextColor,
-        fontSize: 12,
-        fontWeight: FontWeight.w400,
+      style: TextStyle(
+        color: style.labelColor,
+        fontFamily: style.fontFamily,
+        fontSize: style.labelFontSize,
       ),
     );
 
-    Widget fieldLayout;
-    if (widget.labelPosition == AppzInputLabelPosition.top) {
-      fieldLayout = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          labelWidget,
-          const SizedBox(height: 4),
-          textFormField,
-        ],
-      );
-    } else { // AppzInputLabelPosition.left
-      fieldLayout = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0, top: 12.0),
-            child: labelWidget,
-          ),
-          Expanded(child: textFormField),
-        ],
-      );
-    }
-
+    // Basic Top Label Layout for now
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        fieldLayout,
-        if (_effectiveErrorMessage != null)
+        if (widget.label.isNotEmpty) ...[
+          labelWidget,
+          const SizedBox(height: 6.0), // Spacing between label and field
+        ],
+        fieldWidget,
+        if (_hasError && _validationErrorMessage != null)
           Padding(
-            padding: const EdgeInsets.only(top: 6.0, left: 12.0),
+            padding: const EdgeInsets.only(top: 6.0),
             child: Text(
-              _effectiveErrorMessage!,
-              style: const TextStyle(color: errorBorderColor, fontSize: 12),
+              _validationErrorMessage!,
+              style: TextStyle(
+                color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).textColor, // Error text color
+                fontSize: style.labelFontSize * 0.9, // Slightly smaller than label
+                fontFamily: style.fontFamily,
+              ),
             ),
           ),
       ],
