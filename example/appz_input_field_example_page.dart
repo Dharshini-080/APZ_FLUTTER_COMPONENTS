@@ -18,6 +18,9 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
   final _passwordController = TextEditingController();
   final _disabledController = TextEditingController(text: "Disabled Text");
   final _errorController = TextEditingController();
+  final _mobileController = TextEditingController();
+  final _aadhaarController = TextEditingController();
+  final _mpinController = TextEditingController();
 
   final _formKey = GlobalKey<FormState>();
 
@@ -29,6 +32,9 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
     _passwordController.dispose();
     _disabledController.dispose();
     _errorController.dispose();
+    _mobileController.dispose();
+    _aadhaarController.dispose();
+    _mpinController.dispose(); // Added this line
     super.dispose();
   }
 
@@ -115,6 +121,43 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
                 fieldType: AppzFieldType.defaultType,
                 initialFieldState: AppzFieldState.error, // Forcing error state appearance initially
                 validator: (value) => 'This is a validation error message.', // Ensures error state persists
+              ),
+              const SizedBox(height: 20),
+
+              const Text("Mobile Number Input (+91 prefix, 10 digits):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Mobile Number',
+                hintText: '00000 00000',
+                controller: _mobileController,
+                fieldType: AppzFieldType.mobile,
+                validationType: AppzInputValidationType.mandatory, // To make it required
+                // Internal validator in AppzInputField for mobile handles 10-digit check
+              ),
+              const SizedBox(height: 20),
+
+              const Text("Aadhaar Input (XXXX XXXX XXXX):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Aadhaar Number',
+                // hintText: 'Enter 12-digit Aadhaar', // Default hint is XXXX XXXX XXXX
+                controller: _aadhaarController,
+                fieldType: AppzFieldType.aadhaar,
+                validationType: AppzInputValidationType.mandatory,
+              ),
+              const SizedBox(height: 20),
+
+              const Text("MPIN Input (Default 4 digits, Obscured):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Enter MPIN',
+                controller: _mpinController,
+                fieldType: AppzFieldType.mpin,
+                obscureText: true,
+                // mpinLength: 4, // Default is 4
+                validationType: AppzInputValidationType.mandatory,
+                validator: (value) { // Example of custom validation for MPIN length
+                  if (value == null || value.isEmpty) return 'MPIN is required.';
+                  if (value.length != 4) return 'MPIN must be 4 digits.'; // Use widget.mpinLength if it were accessible here or passed
+                  return null;
+                },
               ),
               const SizedBox(height: 30),
 
