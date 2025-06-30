@@ -179,21 +179,16 @@ class AppzStyleConfig {
     // If the field is filled, and there's a specific "filled" configuration,
     // let its background override the current state's background if it's different from default.
     // This logic might need refinement based on desired behavior.
-    if (isFilled) {
-        final filledStyleOverrides = _rawJsonStyles['filled'];
-        if (filledStyleOverrides != null && filledStyleOverrides['backgroundColor'] != null) {
-             final filledBgColor = _parseColor(filledStyleOverrides['backgroundColor'] as String?, currentStyle.backgroundColor);
-             if (filledBgColor != currentStyle.backgroundColor) { // Only override if different
-                return currentStyle.copyWith(
-                  backgroundColor: filledBgColor
-                );
-             }
-        } else if (filledStyleOverrides != null) {
-            // If 'filled' exists but doesn't specify a background, it might mean other properties
-            // This simply merges all 'filled' properties over the current state's style.
-            AppzStateStyle tempFilledStyle = AppzStateStyle.fromJson(filledStyleOverrides, currentStyle);
-            return currentStyle.copyWith(tempFilledStyle);
-
+    // If the field `isFilled` (meaning it has text), AND the current state is NOT `AppzFieldState.filled` itself
+    // (to avoid double processing if 'filled' was the primary state chosen by the switch),
+    // then we check if the 'filled' configuration in JSON has any specific overrides.
+    // These overrides are then applied ON TOP of the `currentStyle` determined by the primary state.
+    if (isFilled && state != AppzFieldState.filled) {
+        final filledStyleJsonOverrides = _rawJsonStyles['filled'];
+        if (filledStyleJsonOverrides != null) {
+            // Apply 'filled' overrides on top of the 'currentStyle'
+            // The base for AppzStateStyle.fromJson here is the currentStyle from the switch case
+            return AppzStateStyle.fromJson(filledStyleJsonOverrides, currentStyle);
         }
     }
     return currentStyle;
@@ -203,9 +198,8 @@ class AppzStyleConfig {
    // This is not used directly by AppzStateStyle.fromJson but can be useful externally if needed.
 }
 
-// Extension on AppzStateStyle to provide a copyWith method, if needed for more granular updates outside of fromJson.
-// However, the current fromJson handles merging from a base, and getStyleForState handles state-specific overrides.
-extension AppzStateStyleCopyWith on AppzStateStyle {
+// Extension on AppzStateStyle to provide a copyWith method.
+extension AppzStateStyleCopyWithExtension on AppzStateStyle {
   AppzStateStyle copyWith({
     Color? borderColor,
     double? borderWidth,
