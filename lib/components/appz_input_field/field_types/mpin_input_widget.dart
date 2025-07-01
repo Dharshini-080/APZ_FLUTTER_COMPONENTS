@@ -21,8 +21,8 @@ class MpinInputWidget extends StatefulWidget {
     required this.obscureText,
     required this.mpinLength,
     this.onChanged,
-    this.validator,
-    required this.validationType,
+    this.validator, // This validator is for the combined mpin string
+    required this.validationType, // Already present, just confirming
   });
 
   @override

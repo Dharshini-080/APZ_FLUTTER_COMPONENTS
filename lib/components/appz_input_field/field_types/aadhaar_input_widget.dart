@@ -10,9 +10,9 @@ class AadhaarInputWidget extends StatefulWidget {
   final bool isEnabled;
   final String? hintText; // Not directly used by segments, but good to have
   final ValueChanged<String>? onChanged; // Called with combined 12-digit string
-  // validator is handled by AppzInputField using the mainController's value
-  // final FormFieldValidator<String>? validator;
-  // final AppzInputValidationType validationType;
+  final AppzInputValidationType validationType;
+  final FormFieldValidator<String>? validator; // Added validator parameter
+
 
   const AadhaarInputWidget({
     super.key,
@@ -22,8 +22,8 @@ class AadhaarInputWidget extends StatefulWidget {
     required this.isEnabled,
     this.hintText, // Default hint "XXXX XXXX XXXX" handled by AppzInputField
     this.onChanged,
-    // this.validator,
-    // required this.validationType,
+    required this.validationType,
+    this.validator, // Added to constructor
   });
 
   @override
