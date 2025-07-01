@@ -26,8 +26,10 @@ class AppzInputField extends StatefulWidget {
 
   final bool obscureText;
   final TextInputAction? textInputAction;
-  final int? maxLength; // Used by defaultType, Aadhaar (for formatted length)
+  final int? maxLength; // Used by defaultType
   final int mpinLength; // Specific to mpinFieldType
+  final String mobileCountryCode; // Specific to mobileFieldType
+  final bool mobileCountryCodeEditable; // Specific to mobileFieldType
 
   // Add other common TextFormField properties as needed:
   // final bool readOnly;
@@ -51,6 +53,8 @@ class AppzInputField extends StatefulWidget {
     this.textInputAction,
     this.maxLength,
     this.mpinLength = 4, // Default mpinLength to 4
+    this.mobileCountryCode = "+91", // Default country code
+    this.mobileCountryCodeEditable = false, // Default to not editable
     // this.readOnly = false,
   });
 
@@ -244,19 +248,90 @@ class _AppzInputFieldState extends State<AppzInputField> {
     }
   }
 
-  String? _performValidation(String? value) {
-    _validationErrorMessage = null; // Clear previous internal error
-    if (widget.validator != null) {
-      _validationErrorMessage = widget.validator!(value);
+  String? _performValidation(String? value) { // value is _internalController.text
+    _validationErrorMessage = null;
+    String? valueToPassToExternalValidator = value;
+    String? valueForBuiltInChecks = value; // For most types, this is the same as 'value'
+
+    // 1. Prepare value for external validator if it's mobile type
+    if (widget.fieldType == AppzFieldType.mobile) {
+      if (value != null && value.startsWith(widget.mobileCountryCode)) {
+        valueToPassToExternalValidator = value.substring(widget.mobileCountryCode.length);
+      } else {
+        // If not starting with country code (e.g. empty, or just digits),
+        // external validator gets whatever is there, assuming it's the number part.
+        valueToPassToExternalValidator = value;
+      }
+      valueForBuiltInChecks = valueToPassToExternalValidator; // Built-in checks also operate on the number part for mobile
     }
+    // For default, aadhaar, mpin, the 'value' from _internalController is what the (potentially composed) validator expects.
+    // And also what our built-in mandatory/format checks will use.
+
+    // 2. Call the effective validator (user-provided OR composed one for aadhaar/mpin)
+    if (widget.validator != null) {
+      _validationErrorMessage = widget.validator!(valueToPassToExternalValidator);
+    }
+
+    // 3. If no error from widget.validator (or if it was null),
+    //    apply built-in AppzInputValidationType checks.
+    if (_validationErrorMessage == null) {
+      final String currentValForBuiltIn = valueForBuiltInChecks ?? "";
+
+      if (widget.validationType == AppzInputValidationType.mandatory && currentValForBuiltIn.isEmpty) {
+        _validationErrorMessage = 'This field is required.'; // TODO: Localize
+      }
+      // Type-specific format/length checks if mandatory passed or wasn't set, and no custom error yet
+      if (_validationErrorMessage == null) { // Check again after mandatory
+        switch (widget.fieldType) {
+          case AppzFieldType.defaultType:
+            if (widget.validationType == AppzInputValidationType.email && currentValForBuiltIn.isNotEmpty) {
+              final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
+              if (!emailRegex.hasMatch(currentValForBuiltIn)) {
+                _validationErrorMessage = 'Enter a valid email address.'; // TODO: Localize
+              }
+            } else if (widget.validationType == AppzInputValidationType.numeric && currentValForBuiltIn.isNotEmpty) {
+              if (double.tryParse(currentValForBuiltIn) == null) {
+                _validationErrorMessage = 'Enter a valid number.'; // TODO: Localize
+              }
+            }
+            // TODO: Add amount, password for defaultType if needed
+            break;
+          case AppzFieldType.mobile:
+            // Length check for mobile (10 digits for number part)
+            // This is also covered by the composed validator in build method if widget.validator was null.
+            // Adding here for robustness if user provides their own widget.validator that doesn't check length.
+            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != 10) {
+              _validationErrorMessage = 'Mobile number must be 10 digits.'; // TODO: Localize
+            }
+            break;
+          case AppzFieldType.aadhaar:
+            // Length check for Aadhaar (12 digits for combined value)
+            // The composed validator in build() handles this primarily.
+            // This is a fallback if widget.validator (the original one) was null.
+             final unformattedAadhaar = currentValForBuiltIn.replaceAll(' ', '');
+            if (unformattedAadhaar.isNotEmpty && unformattedAadhaar.length != 12) {
+               _validationErrorMessage = 'Aadhaar number must be 12 digits.'; // TODO: Localize
+            }
+            break;
+          case AppzFieldType.mpin:
+            // Length check for MPIN (widget.mpinLength for combined value)
+            // The composed validator in build() handles this primarily.
+            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != widget.mpinLength) {
+              _validationErrorMessage = 'MPIN must be ${widget.mpinLength} digits.'; // TODO: Localize
+            }
+            break;
+          default:
+            break;
+        }
+      }
+    }
+
     // Update state based on validation result
     if (_validationErrorMessage != null) {
       _updateState(AppzFieldState.error, errorMessage: _validationErrorMessage);
     } else if (!_isFocused) {
-      // If valid and not focused, set to filled or default
       _updateState(_internalController.text.isNotEmpty ? AppzFieldState.filled : AppzFieldState.defaultState);
     } else if (_isFocused) {
-      // If valid and focused, remain in focused state.
       _updateState(AppzFieldState.focused);
     }
     return _validationErrorMessage;
@@ -393,45 +468,24 @@ class _AppzInputFieldState extends State<AppzInputField> {
       fieldWidget = MobileInputWidget(
         currentStyle: style,
         mainController: _internalController, // This controller is for the number part
-        mainFocusNode: _internalFocusNode, // Main focus node for the number part
+        mainFocusNode: _internalFocusNode,
         isEnabled: !_isEffectivelyDisabled,
         hintText: widget.hintText,
-        // countryCode: "+91", // Default or from widget param
-        // countryCodeEditable: false, // Default or from widget param
-        onChanged: (fullNumber) { // This callback receives "+91XXXXXXXXXX"
-          // If AppzInputField's controller should also reflect this full number,
-          // we might need another layer of controller management or pass _internalController
-          // to MobileInputWidget to manage only its number part, and MobileInputWidget
-          // calls widget.onChanged with the combined value.
-          // For now, let's assume _internalController passed to AppzInputField
-          // should hold just the 10-digit number, and MobileInputWidget combines it for its onChanged.
-          // This means AppzInputField's onChanged will also receive just the 10-digit number.
-          // This needs clarification on how the main AppzInputField controller value should behave.
-          // Let's assume for now: AppzInputField's controller = 10 digit number.
-          // The MobileInputWidget itself would be responsible for calling AppzInputField's onChanged
-          // with the combined value if that's the desired API.
-          // For simplicity here, _internalController is for the 10-digit part.
-           widget.onChanged?.call(_internalController.text); // This is for the 10-digit part
+        countryCode: widget.mobileCountryCode,
+        countryCodeEditable: widget.mobileCountryCodeEditable,
+        onChanged: (fullNumber) {
+          // _MobileInputWidget updates AppzInputField's _internalController with the full number.
+          // The listener on _internalController (_handleTextChange) will call widget.onChanged.
+          // So, direct call to widget.onChanged here might be redundant if _internalController
+          // is indeed set to the full number by MobileInputWidget.
+          // For now, assuming _handleTextChange covers it.
+          // If _internalController in AppzInputField was only for the 10-digit part,
+          // then this onChanged from MobileInputWidget would be essential for the parent to get the full number.
+          // Decision: _internalController holds the full number.
         },
-        validator: (numberPart) { // Validator for the 10-digit number part
-          // Perform validation for the 10-digit number
-          if (widget.validator != null) { // Call main validator if provided
-            // The main validator might expect the full "+91XXXXXXXXXX" or just "XXXXXXXXXX"
-            // This needs to be consistent. For now, assume it validates the number part.
-            final mainValidationError = widget.validator!(numberPart);
-            if (mainValidationError != null) return mainValidationError;
-          }
-           if (numberPart == null || numberPart.isEmpty) {
-            if (widget.validationType == AppzInputValidationType.mandatory) {
-                 return 'Mobile number is required.'; // TODO: Localize
-            }
-            return null;
-          }
-          if (numberPart.length != 10) {
-            return 'Mobile number must be 10 digits.'; // TODO: Localize
-          }
-          return null;
-        },
+        // The validator for MobileInputWidget's internal TextFormField is handled by _performValidation now.
+        // _performValidation extracts the number part and calls widget.validator with it.
+        validator: widget.validator, // Pass the original validator, _performValidation will adapt
         validationType: widget.validationType,
       );
     } else if (widget.fieldType == AppzFieldType.aadhaar) {
