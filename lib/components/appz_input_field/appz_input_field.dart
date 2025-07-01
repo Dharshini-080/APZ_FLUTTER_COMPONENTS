@@ -1,9 +1,12 @@
-import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Required for TextInputFormatter
+import 'package:flutter/services.dart';
 import 'appz_input_field_enums.dart';
 import 'appz_style_config.dart';
-import 'formatters/aadhaar_input_formatter.dart'; // Import the formatter
+import 'formatters/aadhaar_input_formatter.dart';
+// Import sub-widgets
+import 'field_types/aadhaar_input_widget.dart';
+import 'field_types/mpin_input_widget.dart';
+import 'field_types/mobile_input_widget.dart';
 
 /// A versatile and themeable input field widget driven by JSON configuration.
 class AppzInputField extends StatefulWidget {
@@ -387,154 +390,63 @@ class _AppzInputFieldState extends State<AppzInputField> {
       );
       fieldWidget = textFormField;
     } else if (widget.fieldType == AppzFieldType.mobile) {
-      const String countryCodePrefix = "+91";
-
-      final prefixWidget = Padding(
-        padding: EdgeInsets.only(
-          left: style.paddingHorizontal,
-          right: style.paddingHorizontal / 2, // Some spacing between prefix and input
-          top: style.paddingVertical,
-          bottom: style.paddingVertical
-        ),
-        child: Text(
-          countryCodePrefix,
-          style: TextStyle(
-            color: style.textColor, // Or a specific prefix color from config
-            fontFamily: style.fontFamily,
-            fontSize: style.fontSize,
-          ),
-        ),
-      );
-
-      // Adjust contentPadding for the TextFormField as prefix is now separate
-      final mobileInputDecoration = baseInputDecoration.copyWith( // Changed here
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: style.paddingHorizontal / 2, // Reduced left padding
-          vertical: style.paddingVertical
-        ),
-        prefixIcon: prefixWidget, // Using prefixIcon to place the text
-        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0), // To make prefix text compact
-      );
-
-      // For mobile, we effectively use a subset of the full decoration for the inner TextFormField
-      // The outer container (if we add one) would have the main border.
-      // For now, let's make the TextFormField itself have the border.
-
-      final mobileTextFormField = TextFormField(
-        controller: _internalController,
-        focusNode: _internalFocusNode,
-        decoration: mobileInputDecoration,
-        style: TextStyle(
-          color: style.textColor,
-          fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
-        ),
-        keyboardType: TextInputType.phone,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          LengthLimitingTextInputFormatter(10), // 10 digits for the number part
-        ],
-        validator: (value) {
-          // Chain with general validator if present
-          String? externalValidationError;
-          if (widget.validator != null) {
-            externalValidationError = widget.validator!(value);
-            if (externalValidationError != null) return externalValidationError;
+      fieldWidget = MobileInputWidget(
+        currentStyle: style,
+        mainController: _internalController, // This controller is for the number part
+        mainFocusNode: _internalFocusNode, // Main focus node for the number part
+        isEnabled: !_isEffectivelyDisabled,
+        hintText: widget.hintText,
+        // countryCode: "+91", // Default or from widget param
+        // countryCodeEditable: false, // Default or from widget param
+        onChanged: (fullNumber) { // This callback receives "+91XXXXXXXXXX"
+          // If AppzInputField's controller should also reflect this full number,
+          // we might need another layer of controller management or pass _internalController
+          // to MobileInputWidget to manage only its number part, and MobileInputWidget
+          // calls widget.onChanged with the combined value.
+          // For now, let's assume _internalController passed to AppzInputField
+          // should hold just the 10-digit number, and MobileInputWidget combines it for its onChanged.
+          // This means AppzInputField's onChanged will also receive just the 10-digit number.
+          // This needs clarification on how the main AppzInputField controller value should behave.
+          // Let's assume for now: AppzInputField's controller = 10 digit number.
+          // The MobileInputWidget itself would be responsible for calling AppzInputField's onChanged
+          // with the combined value if that's the desired API.
+          // For simplicity here, _internalController is for the 10-digit part.
+           widget.onChanged?.call(_internalController.text); // This is for the 10-digit part
+        },
+        validator: (numberPart) { // Validator for the 10-digit number part
+          // Perform validation for the 10-digit number
+          if (widget.validator != null) { // Call main validator if provided
+            // The main validator might expect the full "+91XXXXXXXXXX" or just "XXXXXXXXXX"
+            // This needs to be consistent. For now, assume it validates the number part.
+            final mainValidationError = widget.validator!(numberPart);
+            if (mainValidationError != null) return mainValidationError;
           }
-          // Mobile specific validation
-          if (value == null || value.isEmpty) {
-            if (widget.validationType == AppzInputValidationType.mandatory) { // Check if mandatory is set
+           if (numberPart == null || numberPart.isEmpty) {
+            if (widget.validationType == AppzInputValidationType.mandatory) {
                  return 'Mobile number is required.'; // TODO: Localize
             }
-            return null; // Not mandatory and empty is fine
+            return null;
           }
-          if (value.length != 10) {
+          if (numberPart.length != 10) {
             return 'Mobile number must be 10 digits.'; // TODO: Localize
           }
           return null;
         },
-        onTap: widget.onTap,
-        onFieldSubmitted: widget.onSubmitted,
-        obscureText: widget.obscureText, // Unlikely for mobile, but respect it
-        textInputAction: widget.textInputAction,
-        enabled: !_isEffectivelyDisabled,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
+        validationType: widget.validationType,
       );
-      fieldWidget = mobileTextFormField; // For now, just the TextFormField itself
-      // Later, this might be wrapped in a custom container to draw a shared border if prefix is truly outside
     } else if (widget.fieldType == AppzFieldType.aadhaar) {
-       final baseInputDecoration = InputDecoration( // Re-define or pass baseInputDecoration
-        hintText: widget.hintText ?? "XXXX XXXX XXXX", // Aadhaar specific hint
-        hintStyle: TextStyle(
-          color: style.textColor.withOpacity(0.5),
-          fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
-        ),
-        filled: true,
-        fillColor: style.backgroundColor,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: style.paddingHorizontal,
-          vertical: style.paddingVertical,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth + 0.5,
-          ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-      );
-      final aadhaarTextFormField = TextFormField(
-        controller: _internalController,
-        focusNode: _internalFocusNode,
-        decoration: baseInputDecoration, // Use the defined base for Aadhaar
-        style: TextStyle(
-          color: style.textColor,
-          fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
-        ),
-        keyboardType: TextInputType.number,
-        inputFormatters: [
-          FilteringTextInputFormatter.digitsOnly,
-          AadhaarInputFormatter(), // Custom formatter for XXXX XXXX XXXX
-          LengthLimitingTextInputFormatter(14), // 12 digits + 2 spaces
-        ],
-        validator: (value) {
-          String? externalValidationError;
-          if (widget.validator != null) {
-            externalValidationError = widget.validator!(value);
-            if (externalValidationError != null) return externalValidationError;
+      fieldWidget = AadhaarInputWidget(
+        currentStyle: style,
+        mainController: _internalController, // Will hold combined 12 digits
+        mainFocusNode: _internalFocusNode, // Main field focus
+        isEnabled: !_isEffectivelyDisabled,
+        hintText: widget.hintText ?? "XXXX XXXX XXXX",
+        onChanged: widget.onChanged, // AppzInputField's onChanged gets the combined 12 digits
+        validator: (value) { // Validator for the combined 12-digit string
+           if (widget.validator != null) {
+            final mainValidationError = widget.validator!(value);
+            if (mainValidationError != null) return mainValidationError;
           }
-          // Aadhaar specific validation
           final unformattedValue = value?.replaceAll(' ', '') ?? '';
           if (unformattedValue.isEmpty) {
              if (widget.validationType == AppzInputValidationType.mandatory) {
@@ -545,96 +457,39 @@ class _AppzInputFieldState extends State<AppzInputField> {
           if (unformattedValue.length != 12) {
             return 'Aadhaar number must be 12 digits.'; // TODO: Localize
           }
-          // Potentially add checksum validation here in the future
           return null;
         },
-        onTap: widget.onTap,
-        onFieldSubmitted: widget.onSubmitted,
-        textInputAction: widget.textInputAction,
-        enabled: !_isEffectivelyDisabled,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
+        validationType: widget.validationType,
       );
-      fieldWidget = aadhaarTextFormField;
     } else if (widget.fieldType == AppzFieldType.mpin) {
-      final mpinSegmentBaseDecoration = _createBaseInputDecoration(style).copyWith(
-        counterText: "",
-        contentPadding: EdgeInsets.zero,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderWidth,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth + 0.5,
-          ),
-        ),
-      );
-
-      fieldWidget = Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(widget.mpinLength, (index) {
-          return SizedBox(
-            width: 48,
-            height: 52,
-            child: TextFormField(
-              controller: _mpinSegmentControllers[index],
-              focusNode: _mpinSegmentFocusNodes[index],
-              enabled: !_isEffectivelyDisabled,
-              textAlign: TextAlign.center,
-              maxLength: 1,
-              obscureText: widget.obscureText,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: TextStyle(
-                color: style.textColor,
-                fontFamily: style.fontFamily,
-                fontSize: style.fontSize + 4,
-                fontWeight: FontWeight.bold,
-              ),
-              decoration: mpinSegmentBaseDecoration,
-              onChanged: (value) {
-                if (value.isEmpty && index > 0) {
-                  FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[index - 1]);
-                } else if (value.isNotEmpty && index < widget.mpinLength - 1) {
-                  // _onMpinSegmentChanged handles forward focus, but this ensures it happens on first char
-                   FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[index + 1]);
-                }
-                 _onMpinSegmentChanged(index); // Ensure value aggregation happens
-              },
-            ),
-          );
-        }),
+      fieldWidget = MpinInputWidget(
+        currentStyle: style,
+        mainController: _internalController, // Will hold combined MPIN
+        isEnabled: !_isEffectivelyDisabled,
+        obscureText: widget.obscureText,
+        mpinLength: widget.mpinLength,
+        onChanged: widget.onChanged, // AppzInputField's onChanged gets the combined MPIN
+        validator: (value) { // Validator for the combined MPIN string
+          if (widget.validator != null) {
+            final mainValidationError = widget.validator!(value);
+            if (mainValidationError != null) return mainValidationError;
+          }
+          if (value == null || value.isEmpty) {
+            if (widget.validationType == AppzInputValidationType.mandatory) {
+                 return 'MPIN is required.'; // TODO: Localize
+            }
+            return null;
+          }
+          if (value.length != widget.mpinLength) {
+            return 'MPIN must be ${widget.mpinLength} digits.'; // TODO: Localize
+          }
+          return null;
+        },
+        validationType: widget.validationType,
       );
     } else {
-        // Fallback for any other types not yet implemented
-        fieldWidget = Text('Unsupported field type: ${widget.fieldType.name}');
+        // Fallback for fileUpload, textDescription, or any other types not yet implemented
+        fieldWidget = Text('Field type ${widget.fieldType.name} not yet fully implemented.');
     }
 
     final String labelTextWithIndicator = widget.label;
