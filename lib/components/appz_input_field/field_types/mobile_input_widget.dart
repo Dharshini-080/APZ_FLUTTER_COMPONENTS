@@ -33,94 +33,123 @@ class MobileInputWidget extends StatefulWidget {
   State<MobileInputWidget> createState() => _MobileInputWidgetState();
 }
 
+import '../utils/country_model.dart';
+import '../utils/country_codes_helper.dart';
+
 class _MobileInputWidgetState extends State<MobileInputWidget> {
   late TextEditingController _numberController;
-  String _currentCountryCode = "";
+  late CountryModel _selectedCountry;
+  List<CountryModel> _countryList = [];
 
   @override
   void initState() {
     super.initState();
-    _currentCountryCode = widget.countryCode;
+    _countryList = CountryCodesHelper.getCountries();
     _numberController = TextEditingController();
-    _initializeNumberFromMainController();
-    _numberController.addListener(_onNumberChanged);
-
-    // Listen to main controller for external programmatic changes
+    _initializeState(); // Handles initial country and number from mainController
+    _numberController.addListener(_onNumberOrCountryChanged);
     widget.mainController.addListener(_onMainControllerChanged);
   }
 
-  void _initializeNumberFromMainController() {
-    final fullText = widget.mainController.text;
-    if (fullText.startsWith(_currentCountryCode)) {
-      final numberPart = fullText.substring(_currentCountryCode.length);
-      if (_numberController.text != numberPart) {
-        _numberController.value = TextEditingValue(
-          text: numberPart,
-          selection: TextSelection.collapsed(offset: numberPart.length),
-        );
+  void _initializeState() {
+    final initialFullNumber = widget.mainController.text;
+    CountryModel? foundCountry;
+    String initialNumberPart = "";
+
+    if (initialFullNumber.isNotEmpty && initialFullNumber.startsWith("+")) {
+      for (var country in _countryList) {
+        // Use displayDialCode which includes '+'
+        if (initialFullNumber.startsWith(country.displayDialCode)) {
+          foundCountry = country;
+          initialNumberPart = initialFullNumber.substring(country.displayDialCode.length);
+          break;
+        }
       }
-    } else if (fullText.isNotEmpty && _currentCountryCode.isNotEmpty && !fullText.startsWith(_currentCountryCode)) {
-      // If main controller has text that doesn't start with current country code,
-      // assume it's just the number part (e.g. initialValue was just number)
-       if (_numberController.text != fullText) {
-        _numberController.value = TextEditingValue(
-          text: fullText, // Assume it's the number part
-          selection: TextSelection.collapsed(offset: fullText.length),
-        );
-         // Immediately update main controller to include country code
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _updateMainController();
-        });
-      }
-    } else {
-        if (_numberController.text.isNotEmpty) _numberController.clear();
     }
+
+    // Determine initial selected country
+    if (foundCountry != null) {
+      _selectedCountry = foundCountry;
+    } else {
+      // Try to find by widget.countryCode (which is like "+91")
+      _selectedCountry = CountryCodesHelper.getCountryByDialCode(widget.countryCode) ?? CountryCodesHelper.getDefaultCountry();
+      // If main controller had text but didn't match any known prefix, assume it's the number part.
+      if (initialFullNumber.isNotEmpty && foundCountry == null && !initialFullNumber.startsWith("+")) {
+          initialNumberPart = initialFullNumber;
+      }
+    }
+
+    // Set number part
+    if (_numberController.text != initialNumberPart) {
+      _numberController.value = TextEditingValue(
+        text: initialNumberPart,
+        selection: TextSelection.collapsed(offset: initialNumberPart.length),
+      );
+    }
+
+    // Ensure main controller reflects the initial state correctly (with country code)
+    // especially if initialFullNumber was just the number part.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _updateMainController();
+    });
   }
 
   void _onMainControllerChanged() {
-    // If main controller changes externally, reflect it in the number part
-    // This prevents an infinite loop with _onNumberChanged
     final fullText = widget.mainController.text;
-    String numberPart = "";
-    if (fullText.startsWith(_currentCountryCode)) {
-      numberPart = fullText.substring(_currentCountryCode.length);
-    } else if (fullText.isNotEmpty && _currentCountryCode.isNotEmpty && !fullText.startsWith(_currentCountryCode)){
-      // If it was set externally without country code, assume it's the number part
-      numberPart = fullText;
-      // It's tricky to auto-prefix here without knowing user intent / cursor.
-      // For now, this listener primarily updates number part if main controller has valid full number.
+    final currentCombinedFromState = _selectedCountry.displayDialCode + _numberController.text;
+
+    if (fullText == currentCombinedFromState) return; // Already in sync
+
+    CountryModel? newSelectedCountry = _selectedCountry;
+    String newNumberPart = "";
+
+    if (fullText.isNotEmpty && fullText.startsWith("+")) {
+       for (var country in _countryList) {
+        if (fullText.startsWith(country.displayDialCode)) {
+          newSelectedCountry = country;
+          newNumberPart = fullText.substring(country.displayDialCode.length);
+          break;
+        }
+      }
+       // If no country code prefix matched, but it starts with +, it's ambiguous.
+       // Keep current selected country and assume rest is number.
+       if(newSelectedCountry == _selectedCountry && !fullText.startsWith(_selectedCountry.displayDialCode)){
+         newNumberPart = fullText; // Or parse out a potential number part
+       }
+
+    } else if (fullText.isNotEmpty) {
+      // No "+" prefix, assume it's a number part for the current country
+      newNumberPart = fullText;
     }
 
-    if (_numberController.text != numberPart) {
-      // Temporarily remove listener to prevent loop when setting text
-      _numberController.removeListener(_onNumberChanged);
-      _numberController.value = TextEditingValue(
-        text: numberPart,
-        selection: TextSelection.collapsed(offset: numberPart.length),
-      );
-      _numberController.addListener(_onNumberChanged);
+    _numberController.removeListener(_onNumberOrCountryChanged);
+    bool needsSetState = false;
+    if (_selectedCountry.isoCode != newSelectedCountry.isoCode) {
+      _selectedCountry = newSelectedCountry;
+      needsSetState = true;
     }
+    if (_numberController.text != newNumberPart) {
+      _numberController.value = TextEditingValue(
+        text: newNumberPart,
+        selection: TextSelection.collapsed(offset: newNumberPart.length),
+      );
+    }
+    _numberController.addListener(_onNumberOrCountryChanged);
+    if(needsSetState && mounted) setState(() {});
   }
 
-
-  void _onNumberChanged() {
+  void _onNumberOrCountryChanged() { // Called by _numberController listener OR dropdown onChanged
     _updateMainController();
   }
 
   void _updateMainController() {
-    final String fullMobileNumber = _currentCountryCode + _numberController.text;
+    final String fullMobileNumber = _selectedCountry.displayDialCode + _numberController.text;
     if (widget.mainController.text != fullMobileNumber) {
       widget.mainController.value = TextEditingValue(
         text: fullMobileNumber,
-        selection: TextSelection.collapsed(offset: fullMobileNumber.length),
+        selection: TextSelection.fromPosition(TextPosition(offset: fullMobileNumber.length)),
       );
-      // The AppzInputField's own listener on _internalController (widget.mainController here)
-      // will call widget.onChanged from AppzInputField.
-      // So, no need to call widget.onChanged directly from here if AppzInputField handles it.
-      // However, the plan was for AppzInputField.onChanged to provide the full number.
-      // Let's ensure AppzInputField's onChanged is correctly called.
-      // The parent AppzInputField's _handleTextChange is already wired to its _internalController.
-      // So, updating widget.mainController.text here WILL trigger the parent's onChanged.
+      // AppzInputField's listener on mainController will trigger its onChanged
     }
   }
 
@@ -130,19 +159,29 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
     if (widget.mainController != oldWidget.mainController) {
       oldWidget.mainController.removeListener(_onMainControllerChanged);
       widget.mainController.addListener(_onMainControllerChanged);
-      _initializeNumberFromMainController(); // Update with new main controller value
+      _initializeState();
     }
-    if (widget.countryCode != oldWidget.countryCode) {
-        _currentCountryCode = widget.countryCode;
-        _updateMainController(); // Re-construct full number with new country code
+    // If countryCode prop changes AND dropdown is not editable, update _selectedCountry
+    if (widget.countryCode != oldWidget.countryCode && !widget.countryCodeEditable) {
+        final newCountry = CountryCodesHelper.getCountryByDialCode(widget.countryCode);
+        if (newCountry != null && newCountry.isoCode != _selectedCountry.isoCode) {
+           if (mounted) {
+            setState(() {
+              _selectedCountry = newCountry;
+            });
+          }
+          _updateMainController();
+        }
     }
-    // isEnabled and currentStyle changes are handled by parent rebuild
+     if (widget.countryCodeEditable != oldWidget.countryCodeEditable) {
+        if(mounted) setState(() {}); // Trigger rebuild to show/hide dropdown
+    }
   }
 
   @override
   void dispose() {
     widget.mainController.removeListener(_onMainControllerChanged);
-    _numberController.removeListener(_onNumberChanged);
+    _numberController.removeListener(_onNumberOrCountryChanged);
     _numberController.dispose();
     super.dispose();
   }
@@ -151,7 +190,6 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
   Widget build(BuildContext context) {
     final AppzStateStyle style = widget.currentStyle;
 
-    // This is the decoration for the number input part, should be borderless
     final numberInputDecoration = InputDecoration(
       hintText: widget.hintText ?? '00000 00000',
       hintStyle: TextStyle(
@@ -159,21 +197,88 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
       ),
-      border: InputBorder.none, // No border for the inner field
+      border: InputBorder.none,
       focusedBorder: InputBorder.none,
       enabledBorder: InputBorder.none,
       errorBorder: InputBorder.none,
       disabledBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
-      contentPadding: EdgeInsets.zero, // No extra padding inside the number field part
-      isDense: true, // Make it compact
+      contentPadding: EdgeInsets.zero,
+      isDense: true,
     );
 
+    Widget countryCodeWidget;
+    if (widget.countryCodeEditable) {
+      countryCodeWidget = DropdownButtonHideUnderline( // Hide default underline
+        child: DropdownButtonFormField<CountryModel>(
+          isDense: true,
+          value: _selectedCountry,
+          items: _countryList.map((CountryModel country) {
+            return DropdownMenuItem<CountryModel>(
+              value: country,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text(country.flagEmoji, style: TextStyle(fontSize: style.fontSize * 1.2)),
+                  const SizedBox(width: 6.0),
+                  Text(country.displayDialCode, style: TextStyle(fontSize: style.fontSize, fontFamily: style.fontFamily, color: style.textColor)),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: widget.isEnabled ? (CountryModel? newValue) {
+            if (newValue != null) {
+              if(mounted) {
+                setState(() {
+                _selectedCountry = newValue;
+              });
+              }
+              _onNumberOrCountryChanged(); // This will call _updateMainController
+            }
+          } : null,
+          decoration: const InputDecoration( // Minimal decoration for the dropdown button itself
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+            isDense: true,
+          ),
+          selectedItemBuilder: (BuildContext context) { // How the selected item looks in the button
+              return _countryList.map<Widget>((CountryModel item) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 0.0), // Adjust to align with text field
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: <Widget>[
+                            Text(item.flagEmoji, style: TextStyle(fontSize: style.fontSize * 1.2)),
+                            const SizedBox(width: 4),
+                            Text(item.displayDialCode, style: TextStyle(fontSize: style.fontSize, fontFamily: style.fontFamily, color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5))),
+                        ],
+                    ),
+                  );
+              }).toList();
+          },
+          icon: Icon(Icons.arrow_drop_down, color: widget.isEnabled ? style.labelColor : style.labelColor.withOpacity(0.5)),
+          iconSize: style.fontSize * 1.5,
+          isExpanded: false,
+        ),
+      );
+    } else {
+      countryCodeWidget = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 0), // Align with TextFormField
+        child: Text(
+          _selectedCountry.displayDialCode,
+          style: TextStyle(
+            color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+          ),
+        ),
+      );
+    }
+
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: style.paddingHorizontal,
-        vertical: style.paddingVertical,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: style.paddingHorizontal), // Vertical padding handled by content alignment
+      height: style.paddingVertical * 2 + style.fontSize * 2.5, // Approximate height based on content
       decoration: BoxDecoration(
         color: widget.isEnabled ? style.backgroundColor : style.backgroundColor.withOpacity(0.5),
         borderRadius: BorderRadius.circular(style.borderRadius),
@@ -183,22 +288,16 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center, // Center items vertically in the Row
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Country Code
-          // TODO: Make country code part focusable/tappable if editable
-          Padding(
-            padding: const EdgeInsets.only(right: 8.0), // Spacing after country code
-            child: Text(
-              _currentCountryCode,
-              style: TextStyle(
-                color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
-                fontFamily: style.fontFamily,
-                fontSize: style.fontSize,
-              ),
-            ),
+          countryCodeWidget,
+          SizedBox(width: style.paddingHorizontal / 2),
+          Container(
+            height: style.fontSize * 1.2,
+            width: 1,
+            color: style.borderColor.withOpacity(0.5),
+            margin: EdgeInsets.symmetric(horizontal: style.paddingHorizontal / 2.5),
           ),
-          // Number Input
           Expanded(
             child: TextFormField(
               controller: _numberController,
@@ -215,9 +314,7 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
                 FilteringTextInputFormatter.digitsOnly,
                 LengthLimitingTextInputFormatter(10),
               ],
-              validator: widget.validator, // This validator is for the 10-digit number part
-              // onChanged is handled by the controller listener (_onNumberChanged)
-              // onFieldSubmitted can be passed from parent if needed
+              validator: widget.validator,
             ),
           ),
         ],

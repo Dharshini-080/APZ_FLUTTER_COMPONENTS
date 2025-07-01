@@ -22,6 +22,7 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
   final _aadhaarController = TextEditingController();
   final _mpinController4digit = TextEditingController();
   final _mpinController6digit = TextEditingController();
+  final _mobileWithDropdownController = TextEditingController();
 
 
   final _formKey = GlobalKey<FormState>();
@@ -38,6 +39,7 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
     _aadhaarController.dispose();
     _mpinController4digit.dispose();
     _mpinController6digit.dispose();
+    _mobileWithDropdownController.dispose();
     super.dispose();
   }
 
@@ -141,6 +143,26 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
                   }
                   // Length (10) and mandatory are already checked by AppzInputField's internal logic
                   // if this validator returns null.
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+
+              const Text("Mobile Number with Country Code Dropdown:", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Mobile (Dropdown)',
+                hintText: 'Enter number',
+                controller: _mobileWithDropdownController, // Will store "+XX...XXXXXXXXXX"
+                fieldType: AppzFieldType.mobile,
+                mobileCountryCodeEditable: true, // Enable dropdown
+                mobileCountryCode: "+1", // Start with US as example
+                validationType: AppzInputValidationType.mandatory,
+                validator: (numberPart) { // Receives only the number part after country code
+                  if (numberPart != null && numberPart.contains(RegExp(r'[^0-9]'))) {
+                    return 'Number part should only contain digits.';
+                  }
+                  // Length check will be handled by AppzInputField's internal validation for mobile
+                  // if this validator returns null and length is not 10.
                   return null;
                 },
               ),

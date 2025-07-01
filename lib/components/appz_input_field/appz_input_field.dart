@@ -250,24 +250,46 @@ class _AppzInputFieldState extends State<AppzInputField> {
 
   String? _performValidation(String? value) { // value is _internalController.text
     _validationErrorMessage = null;
-    String? valueToPassToExternalValidator = value;
-    String? valueForBuiltInChecks = value; // For most types, this is the same as 'value'
+  String? _performValidation(String? value) { // value is _internalController.text
+    _validationErrorMessage = null;
+    String? valueToPassToExternalValidator = value; // For default, aadhaar, mpin (validator expects full value)
+    String? valueForBuiltInChecks = value;         // For default, aadhaar, mpin
 
-    // 1. Prepare value for external validator if it's mobile type
+    // 1. Prepare values for mobile type
     if (widget.fieldType == AppzFieldType.mobile) {
-      if (value != null && value.startsWith(widget.mobileCountryCode)) {
-        valueToPassToExternalValidator = value.substring(widget.mobileCountryCode.length);
-      } else {
-        // If not starting with country code (e.g. empty, or just digits),
-        // external validator gets whatever is there, assuming it's the number part.
-        valueToPassToExternalValidator = value;
-      }
-      valueForBuiltInChecks = valueToPassToExternalValidator; // Built-in checks also operate on the number part for mobile
-    }
-    // For default, aadhaar, mpin, the 'value' from _internalController is what the (potentially composed) validator expects.
-    // And also what our built-in mandatory/format checks will use.
+      String currentCountryDialCode = widget.mobileCountryCode; // Default
+      String numberPart = "";
 
-    // 2. Call the effective validator (user-provided OR composed one for aadhaar/mpin)
+      if (value != null && value.startsWith("+")) {
+        // Attempt to find the dynamic prefix from the full value
+        bool foundPrefix = false;
+        for (var country in CountryCodesHelper.getCountries()) { // Assumes CountryCodesHelper is accessible
+          if (value.startsWith(country.displayDialCode)) {
+            currentCountryDialCode = country.displayDialCode;
+            numberPart = value.substring(currentCountryDialCode.length);
+            foundPrefix = true;
+            break;
+          }
+        }
+        if (!foundPrefix) {
+          // If no known prefix matches, but it starts with "+", it's ambiguous.
+          // For validation, we might assume the number part is after the first non-digit, or treat as invalid.
+          // Or, more simply, pass the full value to user's validator and let them parse.
+          // For now, if prefix not in known list, treat numberPart as potentially empty or invalid for built-in checks.
+          // And pass the original 'value' to user's validator.
+          numberPart = value; // Or try to extract digits after '+'
+        }
+      } else if (value != null) { // No "+" prefix, assume it's all number part
+        numberPart = value;
+      }
+
+      valueToPassToExternalValidator = numberPart; // User's validator for mobile gets only the number part
+      valueForBuiltInChecks = numberPart;
+    }
+
+    // 2. Call the user-provided validator (if any)
+    // For mobile, it gets the number part. For others, it gets the full value from _internalController.
+    // For Aadhaar/MPIN, this `widget.validator` is the one composed in the build method.
     if (widget.validator != null) {
       _validationErrorMessage = widget.validator!(valueToPassToExternalValidator);
     }
@@ -278,9 +300,11 @@ class _AppzInputFieldState extends State<AppzInputField> {
       final String currentValForBuiltIn = valueForBuiltInChecks ?? "";
 
       if (widget.validationType == AppzInputValidationType.mandatory && currentValForBuiltIn.isEmpty) {
+        // For mobile, this checks if the number part is empty.
+        // For others, it checks if the full value is empty.
         _validationErrorMessage = 'This field is required.'; // TODO: Localize
       }
-      // Type-specific format/length checks if mandatory passed or wasn't set, and no custom error yet
+
       if (_validationErrorMessage == null) { // Check again after mandatory
         switch (widget.fieldType) {
           case AppzFieldType.defaultType:
@@ -294,28 +318,19 @@ class _AppzInputFieldState extends State<AppzInputField> {
                 _validationErrorMessage = 'Enter a valid number.'; // TODO: Localize
               }
             }
-            // TODO: Add amount, password for defaultType if needed
             break;
           case AppzFieldType.mobile:
-            // Length check for mobile (10 digits for number part)
-            // This is also covered by the composed validator in build method if widget.validator was null.
-            // Adding here for robustness if user provides their own widget.validator that doesn't check length.
             if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != 10) {
               _validationErrorMessage = 'Mobile number must be 10 digits.'; // TODO: Localize
             }
             break;
           case AppzFieldType.aadhaar:
-            // Length check for Aadhaar (12 digits for combined value)
-            // The composed validator in build() handles this primarily.
-            // This is a fallback if widget.validator (the original one) was null.
-             final unformattedAadhaar = currentValForBuiltIn.replaceAll(' ', '');
+             final unformattedAadhaar = currentValForBuiltIn.replaceAll(' ', ''); // valueForBuiltInChecks is full aadhaar
             if (unformattedAadhaar.isNotEmpty && unformattedAadhaar.length != 12) {
                _validationErrorMessage = 'Aadhaar number must be 12 digits.'; // TODO: Localize
             }
             break;
           case AppzFieldType.mpin:
-            // Length check for MPIN (widget.mpinLength for combined value)
-            // The composed validator in build() handles this primarily.
             if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != widget.mpinLength) {
               _validationErrorMessage = 'MPIN must be ${widget.mpinLength} digits.'; // TODO: Localize
             }
