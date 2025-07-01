@@ -130,11 +130,19 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
               const Text("Mobile Number Input (+91 prefix, 10 digits):", style: TextStyle(fontWeight: FontWeight.bold)),
               AppzInputField(
                 label: 'Mobile Number',
-                hintText: '00000 00000',
-                controller: _mobileController,
+                hintText: 'Enter 10-digit number', // Hint for the number part
+                controller: _mobileController, // Will store "+91XXXXXXXXXX"
                 fieldType: AppzFieldType.mobile,
-                validationType: AppzInputValidationType.mandatory, // To make it required
-                // Internal validator in AppzInputField for mobile handles 10-digit check
+                // mobileCountryCode: "+91", // Default
+                validationType: AppzInputValidationType.mandatory,
+                validator: (numberPart) { // This validator receives ONLY the 10-digit number part
+                  if (numberPart != null && numberPart.startsWith('0')) {
+                    return 'Number should not start with 0.';
+                  }
+                  // Length (10) and mandatory are already checked by AppzInputField's internal logic
+                  // if this validator returns null.
+                  return null;
+                },
               ),
               const SizedBox(height: 20),
 
