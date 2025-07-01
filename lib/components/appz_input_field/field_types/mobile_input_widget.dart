@@ -26,8 +26,8 @@ class MobileInputWidget extends StatefulWidget {
     this.countryCode = "+91",
     this.countryCodeEditable = false, // Default to fixed country code
     this.onChanged,
-    this.validator,
-    required this.validationType,
+    this.validator, // This validator is for the number part
+    required this.validationType, // Already present, just confirming
   });
 
   @override
