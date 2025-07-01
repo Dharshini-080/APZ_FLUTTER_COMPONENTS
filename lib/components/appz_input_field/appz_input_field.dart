@@ -406,7 +406,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
       );
 
       // Adjust contentPadding for the TextFormField as prefix is now separate
-      final mobileInputDecoration = inputDecoration.copyWith(
+      final mobileInputDecoration = baseInputDecoration.copyWith( // Changed here
         contentPadding: EdgeInsets.symmetric(
           horizontal: style.paddingHorizontal / 2, // Reduced left padding
           vertical: style.paddingVertical
