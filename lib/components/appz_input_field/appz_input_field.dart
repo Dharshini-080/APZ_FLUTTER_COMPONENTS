@@ -12,6 +12,7 @@ class AppzInputField extends StatefulWidget {
   final AppzFieldType fieldType;
   final AppzFieldState initialFieldState; // Can be used to force a state externally
   final String? initialValue; // Used if controller is not provided
+  final AppzInputValidationType validationType; // Re-adding this parameter
 
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
@@ -36,6 +37,7 @@ class AppzInputField extends StatefulWidget {
     this.fieldType = AppzFieldType.defaultType,
     this.initialFieldState = AppzFieldState.defaultState,
     this.initialValue,
+    this.validationType = AppzInputValidationType.none, // Initialize in constructor
     this.focusNode,
     this.onChanged,
     this.onTap,
@@ -274,6 +276,61 @@ class _AppzInputFieldState extends State<AppzInputField> {
   }
 
   @override
+  InputDecoration _createBaseInputDecoration(AppzStateStyle style) {
+    return InputDecoration(
+      hintText: widget.hintText,
+      hintStyle: TextStyle(
+        color: style.textColor.withOpacity(0.5),
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+      ),
+      filled: true,
+      fillColor: style.backgroundColor,
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: style.paddingHorizontal,
+        vertical: style.paddingVertical,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(
+          color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
+          width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
+        ),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(
+          color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
+          width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth,
+        ),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(
+          color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
+          width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth + 0.5,
+        ),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(style.borderRadius),
+        borderSide: BorderSide(
+          color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderColor,
+          width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderWidth,
+        ),
+      ),
+      // prefixIcon and suffixIcon can be added via .copyWith() if needed by specific types
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     // This is where the UI rendering based on widget.fieldType will happen.
     // Styling will be fetched from AppzStyleConfig.instance using _currentFieldState and _isFilled.
@@ -300,67 +357,19 @@ class _AppzInputFieldState extends State<AppzInputField> {
     } // 'filled' and 'default' are handled by getStyleForState via _isFilled
 
     final AppzStateStyle style = AppzStyleConfig.instance.getStyleForState(stateForStyle, isFilled: _isFilled);
+    final InputDecoration baseInputDecoration = _createBaseInputDecoration(style);
 
     Widget fieldWidget;
 
     if (widget.fieldType == AppzFieldType.defaultType) {
-      final inputDecoration = InputDecoration(
-        hintText: widget.hintText,
-        hintStyle: TextStyle(
-          color: style.textColor.withOpacity(0.5), // Example: hint is less prominent
-          fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
-        ),
-        filled: true,
-        fillColor: style.backgroundColor,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: style.paddingHorizontal,
-          vertical: style.paddingVertical,
-        ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor, // Always use focused border color
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor, // Error border color even when focused
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth + 0.5, // Slightly thicker
-          ),
-        ),
-        disabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(style.borderRadius),
-          borderSide: BorderSide(
-            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderColor,
-            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderWidth,
-          ),
-        ),
-        // prefixIcon: widget.prefixIcon, // Will add these later if part of defaultType
-        // suffixIcon: widget.suffixIcon,
-      );
-
       final textFormField = TextFormField(
         controller: _internalController,
         focusNode: _internalFocusNode,
-        decoration: inputDecoration,
+        decoration: baseInputDecoration.copyWith(
+           // No specific overrides for defaultType, uses baseInputDecoration directly
+           // prefixIcon: widget.prefixIcon, // If we add prefix/suffix to AppzInputField params directly
+           // suffixIcon: widget.suffixIcon,
+        ),
         style: TextStyle(
           color: style.textColor,
           fontFamily: style.fontFamily,
@@ -374,14 +383,10 @@ class _AppzInputFieldState extends State<AppzInputField> {
         maxLength: widget.maxLength,
         enabled: !_isEffectivelyDisabled,
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        // keyboardType: _mapInputTypeToKeyboardType(widget.inputType), // Assuming defaultType uses text keyboard
       );
       fieldWidget = textFormField;
-    } else {
-      // Placeholder for other field types
-      fieldWidget = Text('Unsupported field type: ${widget.fieldType.name}');
     } else if (widget.fieldType == AppzFieldType.mobile) {
-      const String countryCodePrefix = "+91"; // For now, hardcoded
+      const String countryCodePrefix = "+91";
 
       final prefixWidget = Padding(
         padding: EdgeInsets.only(
@@ -457,12 +462,60 @@ class _AppzInputFieldState extends State<AppzInputField> {
       fieldWidget = mobileTextFormField; // For now, just the TextFormField itself
       // Later, this might be wrapped in a custom container to draw a shared border if prefix is truly outside
     } else if (widget.fieldType == AppzFieldType.aadhaar) {
+       final baseInputDecoration = InputDecoration( // Re-define or pass baseInputDecoration
+        hintText: widget.hintText ?? "XXXX XXXX XXXX", // Aadhaar specific hint
+        hintStyle: TextStyle(
+          color: style.textColor.withOpacity(0.5),
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+        ),
+        filled: true,
+        fillColor: style.backgroundColor,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: style.paddingHorizontal,
+          vertical: style.paddingVertical,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).borderWidth + 0.5,
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+      );
       final aadhaarTextFormField = TextFormField(
         controller: _internalController,
         focusNode: _internalFocusNode,
-        decoration: inputDecoration.copyWith( // Reuse default inputDecoration, can customize if needed
-            hintText: widget.hintText ?? "XXXX XXXX XXXX", // Aadhaar specific hint
-        ),
+        decoration: baseInputDecoration, // Use the defined base for Aadhaar
         style: TextStyle(
           color: style.textColor,
           fontFamily: style.fontFamily,
@@ -502,16 +555,53 @@ class _AppzInputFieldState extends State<AppzInputField> {
       );
       fieldWidget = aadhaarTextFormField;
     } else if (widget.fieldType == AppzFieldType.mpin) {
-      // TODO: Potentially get mpin specific styles from AppzStyleConfig
-      // e.g. segmentSpacing, segmentBorderColor, segmentBackgroundColor etc.
-      // For now, using general 'style' for some aspects.
+      final mpinSegmentBaseDecoration = _createBaseInputDecoration(style).copyWith(
+        counterText: "",
+        contentPadding: EdgeInsets.zero,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
+          ),
+        ),
+        disabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderWidth,
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
+          borderSide: BorderSide(
+            color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
+            width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth + 0.5,
+          ),
+        ),
+      );
 
       fieldWidget = Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Or MainAxisAlignment.start with Spacers
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(widget.mpinLength, (index) {
           return SizedBox(
-            width: 48, // TODO: Make this configurable via AppzStyleConfig
-            height: 52, // TODO: Make this configurable via AppzStyleConfig
+            width: 48,
+            height: 52,
             child: TextFormField(
               controller: _mpinSegmentControllers[index],
               focusNode: _mpinSegmentFocusNodes[index],
@@ -524,65 +614,29 @@ class _AppzInputFieldState extends State<AppzInputField> {
               style: TextStyle(
                 color: style.textColor,
                 fontFamily: style.fontFamily,
-                fontSize: style.fontSize + 4, // Larger font for single digit
+                fontSize: style.fontSize + 4,
                 fontWeight: FontWeight.bold,
               ),
-              decoration: InputDecoration(
-                counterText: "", // Hide the maxLength counter
-                contentPadding: EdgeInsets.zero, // Adjust padding for centering
-                filled: true,
-                fillColor: style.backgroundColor,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5), // Smaller radius for segments
-                  borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-                  borderSide: BorderSide(color: style.borderColor, width: style.borderWidth),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-                  borderSide: BorderSide(
-                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderColor,
-                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.focused, isFilled: _isFilled).borderWidth,
-                  ),
-                ),
-                disabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-                  borderSide: BorderSide(
-                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderColor,
-                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.disabled).borderWidth,
-                  ),
-                ),
-                errorBorder: OutlineInputBorder( // Basic error indication for segments
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-                  borderSide: BorderSide(
-                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
-                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth,
-                  ),
-                ),
-                 focusedErrorBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(style.borderRadius / 1.5),
-                  borderSide: BorderSide(
-                    color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderColor,
-                    width: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error).borderWidth + 0.5,
-                  ),
-                ),
-              ),
+              decoration: mpinSegmentBaseDecoration,
               onChanged: (value) {
-                // _onMpinSegmentChanged(index) is already listening to controller
-                // This onChanged is for additional logic if needed, like backspace handling
                 if (value.isEmpty && index > 0) {
                   FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[index - 1]);
+                } else if (value.isNotEmpty && index < widget.mpinLength - 1) {
+                  // _onMpinSegmentChanged handles forward focus, but this ensures it happens on first char
+                   FocusScope.of(context).requestFocus(_mpinSegmentFocusNodes[index + 1]);
                 }
+                 _onMpinSegmentChanged(index); // Ensure value aggregation happens
               },
             ),
           );
         }),
       );
+    } else {
+        // Fallback for any other types not yet implemented
+        fieldWidget = Text('Unsupported field type: ${widget.fieldType.name}');
     }
 
-    final String labelTextWithIndicator = widget.label; // Mandatory indicator logic can be added here
+    final String labelTextWithIndicator = widget.label;
     final Text labelWidget = Text(
       labelTextWithIndicator,
       style: TextStyle(
