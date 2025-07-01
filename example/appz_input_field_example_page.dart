@@ -20,7 +20,9 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
   final _errorController = TextEditingController();
   final _mobileController = TextEditingController();
   final _aadhaarController = TextEditingController();
-  final _mpinController = TextEditingController();
+  final _mpinController4digit = TextEditingController();
+  final _mpinController6digit = TextEditingController();
+
 
   final _formKey = GlobalKey<FormState>();
 
@@ -34,7 +36,8 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
     _errorController.dispose();
     _mobileController.dispose();
     _aadhaarController.dispose();
-    _mpinController.dispose(); // Added this line
+    _mpinController4digit.dispose();
+    _mpinController6digit.dispose();
     super.dispose();
   }
 
@@ -145,17 +148,30 @@ class _AppzInputFieldExamplePageState extends State<AppzInputFieldExamplePage> {
               ),
               const SizedBox(height: 20),
 
-              const Text("MPIN Input (Default 4 digits, Obscured):", style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text("MPIN Input (4 digits, Obscured, Mandatory):", style: TextStyle(fontWeight: FontWeight.bold)),
               AppzInputField(
-                label: 'Enter MPIN',
-                controller: _mpinController,
+                label: 'Enter 4-Digit MPIN',
+                controller: _mpinController4digit,
                 fieldType: AppzFieldType.mpin,
                 obscureText: true,
-                // mpinLength: 4, // Default is 4
+                mpinLength: 4, // Explicitly 4
                 validationType: AppzInputValidationType.mandatory,
-                validator: (value) { // Example of custom validation for MPIN length
-                  if (value == null || value.isEmpty) return 'MPIN is required.';
-                  if (value.length != 4) return 'MPIN must be 4 digits.'; // Use widget.mpinLength if it were accessible here or passed
+                // Validator in AppzInputField already checks for mpinLength and mandatory
+              ),
+              const SizedBox(height: 20),
+
+              const Text("MPIN Input (6 digits, Visible, Optional):", style: TextStyle(fontWeight: FontWeight.bold)),
+              AppzInputField(
+                label: 'Set 6-Digit MPIN (Optional)',
+                controller: _mpinController6digit,
+                fieldType: AppzFieldType.mpin,
+                obscureText: false, // Visible digits
+                mpinLength: 6,
+                validationType: AppzInputValidationType.none, // Not mandatory for this example
+                validator: (value) { // Custom validator example
+                  if (value != null && value.isNotEmpty && value.length != 6) {
+                    return 'If entered, MPIN must be 6 digits.';
+                  }
                   return null;
                 },
               ),
