@@ -124,10 +124,17 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
 
     _numberController.removeListener(_onNumberOrCountryChanged);
     bool needsSetState = false;
-    if (_selectedCountry.isoCode != newSelectedCountry.isoCode) {
-      _selectedCountry = newSelectedCountry;
+    if (newSelectedCountry != null && _selectedCountry.isoCode != newSelectedCountry.isoCode) { // Ensure newSelectedCountry is not null before comparing isoCode
+      _selectedCountry = newSelectedCountry; // Safe now because of the null check
       needsSetState = true;
+    } else if (newSelectedCountry == null && initialFullNumber.isNotEmpty && initialFullNumber.startsWith("+")) {
+        // This case means a prefix was entered that didn't match any known country.
+        // We might want to clear _selectedCountry or set to a very generic default,
+        // or keep the old _selectedCountry and just update the number part.
+        // For now, keeping the old _selectedCountry if no new valid one is found from prefix.
+        // The numberPart would have been set to text after '+', which might be an invalid number for old country.
     }
+
     if (_numberController.text != newNumberPart) {
       _numberController.value = TextEditingValue(
         text: newNumberPart,
@@ -235,10 +242,11 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
               _onNumberOrCountryChanged();
             }
           } : null,
-          decoration: InputDecoration(
+          decoration: InputDecoration( // Minimal decoration for the dropdown button itself
             border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(vertical: style.paddingVertical, horizontal: 4.0), // Adjusted
+            contentPadding: EdgeInsets.zero, // Let parent handle padding
             isDense: true,
+            isCollapsed: true, // Important for tight layout
           ),
           selectedItemBuilder: (BuildContext context) {
               return _countryList.map<Widget>((CountryModel item) {
