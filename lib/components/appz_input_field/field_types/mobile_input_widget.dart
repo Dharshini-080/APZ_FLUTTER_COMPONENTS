@@ -1,11 +1,7 @@
-import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../appz_input_field_enums.dart';
 import '../appz_style_config.dart';
-
-import '../utils/country_model.dart';
-import '../utils/country_codes_helper.dart';
 
 class MobileInputWidget extends StatefulWidget {
   final AppzStateStyle currentStyle;
@@ -36,6 +32,9 @@ class MobileInputWidget extends StatefulWidget {
   @override
   State<MobileInputWidget> createState() => _MobileInputWidgetState();
 }
+
+import '../utils/country_model.dart';
+import '../utils/country_codes_helper.dart';
 
 class _MobileInputWidgetState extends State<MobileInputWidget> {
   late TextEditingController _numberController;
@@ -126,9 +125,9 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
     _numberController.removeListener(_onNumberOrCountryChanged);
     bool needsSetState = false;
     if (newSelectedCountry != null && _selectedCountry.isoCode != newSelectedCountry.isoCode) { // Ensure newSelectedCountry is not null before comparing isoCode
-      _selectedCountry = newSelectedCountry; // Safe now because of the null check
+      _selectedCountry = newSelectedCountry;
       needsSetState = true;
-    } else if (newSelectedCountry == null && initialFullNumber.isNotEmpty && initialFullNumber.startsWith("+")) {
+    } else if (newSelectedCountry == null && fullText.isNotEmpty && fullText.startsWith("+")) { // Used fullText here
         // This case means a prefix was entered that didn't match any known country.
         // We might want to clear _selectedCountry or set to a very generic default,
         // or keep the old _selectedCountry and just update the number part.
