@@ -334,7 +334,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
         break;
       case AppzFieldType.mobile:
         fieldWidget = MobileInputWidget(
-          key: ValueKey('mobile_${widget.key?.toString() ?? UniqueKey().toString()}'),
+          key: widget.key ?? ValueKey('mobile_${widget.label}'), // Stabilized key
           currentStyle: style,
           mainController: _internalController,
           mainFocusNode: _internalFocusNode,
@@ -349,7 +349,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
         break;
       case AppzFieldType.aadhaar:
         fieldWidget = AadhaarInputWidget(
-          key: ValueKey('aadhaar_${widget.key?.toString() ?? UniqueKey().toString()}'),
+          key: widget.key ?? ValueKey('aadhaar_${widget.label}'), // Stabilized key
           currentStyle: style,
           mainController: _internalController,
           mainFocusNode: _internalFocusNode,
@@ -362,9 +362,10 @@ class _AppzInputFieldState extends State<AppzInputField> {
         break;
       case AppzFieldType.mpin:
         fieldWidget = MpinInputWidget(
-          key: ValueKey('mpin_${widget.key?.toString() ?? UniqueKey().toString()}'),
+          key: widget.key ?? ValueKey('mpin_${widget.label}'), // Stabilized key
           currentStyle: style,
           mainController: _internalController,
+        mainFocusNode: _internalFocusNode, // Pass the main focus node
           isEnabled: !_isEffectivelyDisabled,
           obscureText: widget.obscureText,
           mpinLength: widget.mpinLength,
@@ -396,14 +397,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
           labelWidget,
           const SizedBox(height: 6.0),
         ],
-        Focus( // Wrap the fieldWidget with a Focus node that uses the main _internalFocusNode
-             // This helps in scenarios where the fieldWidget itself might not be a TextFormField directly
-             // (like custom painted ones or complex composites) but we still want AppzInputField's focus logic to apply.
-             // For sub-widgets that manage their own internal focus (like Aadhaar/MPIN segments),
-             // this outer Focus node helps in activating the component as a whole.
-            focusNode: _internalFocusNode,
-            child: fieldWidget
-        ),
+        fieldWidget, // Removed the outer Focus widget wrapper
         if (_hasError && _validationErrorMessage != null)
           Padding(
             padding: const EdgeInsets.only(top: 6.0),

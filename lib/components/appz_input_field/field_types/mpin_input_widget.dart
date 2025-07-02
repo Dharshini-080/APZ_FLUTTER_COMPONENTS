@@ -11,6 +11,7 @@ class MpinInputWidget extends StatefulWidget {
   final ValueChanged<String>? onChanged; // Called with combined mpin string
   final FormFieldValidator<String>? validator; // Validates combined mpin string
   final AppzInputValidationType validationType;
+  final FocusNode? mainFocusNode; // For overall component focus
 
 
   const MpinInputWidget({
@@ -20,9 +21,10 @@ class MpinInputWidget extends StatefulWidget {
     required this.isEnabled,
     required this.obscureText,
     required this.mpinLength,
+    this.mainFocusNode,
     this.onChanged,
-    this.validator, // This validator is for the combined mpin string
-    required this.validationType, // Already present, just confirming
+    this.validator,
+    required this.validationType,
   });
 
   @override
@@ -37,6 +39,22 @@ class _MpinInputWidgetState extends State<MpinInputWidget> {
   void initState() {
     super.initState();
     _initializeSegments();
+    widget.mainFocusNode?.addListener(_handleMainFocus);
+  }
+
+  void _handleMainFocus() {
+    if (widget.mainFocusNode != null && widget.mainFocusNode!.hasFocus && widget.isEnabled) {
+      // Focus the first empty or first segment
+      for (int i = 0; i < widget.mpinLength; i++) {
+        if (_segmentControllers[i].text.isEmpty) {
+          FocusScope.of(context).requestFocus(_segmentFocusNodes[i]);
+          return;
+        }
+      }
+      if (_segmentFocusNodes.isNotEmpty) {
+         FocusScope.of(context).requestFocus(_segmentFocusNodes[0]);
+      }
+    }
   }
 
   void _initializeSegments() {
@@ -69,9 +87,13 @@ class _MpinInputWidgetState extends State<MpinInputWidget> {
     super.didUpdateWidget(oldWidget);
     if (widget.mpinLength != oldWidget.mpinLength) {
       _disposeSegments();
-      _initializeSegments();
+      _initializeSegments(); // This already re-adds listeners to new segment controllers
     }
-    // TODO: Handle external changes like isEnabled if needed, though AppzInputField might just rebuild it.
+    if (widget.mainFocusNode != oldWidget.mainFocusNode) {
+       oldWidget.mainFocusNode?.removeListener(_handleMainFocus);
+       widget.mainFocusNode?.addListener(_handleMainFocus);
+    }
+    // If isEnabled changes, parent rebuild will pass new isEnabled, affecting segment TextFormFields.
   }
 
 
@@ -103,6 +125,7 @@ class _MpinInputWidgetState extends State<MpinInputWidget> {
 
   @override
   void dispose() {
+    widget.mainFocusNode?.removeListener(_handleMainFocus);
     _disposeSegments();
     super.dispose();
   }
