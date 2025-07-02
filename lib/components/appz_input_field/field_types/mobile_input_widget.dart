@@ -1,7 +1,11 @@
+import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../appz_input_field_enums.dart';
 import '../appz_style_config.dart';
+
+import '../utils/country_model.dart';
+import '../utils/country_codes_helper.dart';
 
 class MobileInputWidget extends StatefulWidget {
   final AppzStateStyle currentStyle;
@@ -32,9 +36,6 @@ class MobileInputWidget extends StatefulWidget {
   @override
   State<MobileInputWidget> createState() => _MobileInputWidgetState();
 }
-
-import '../utils/country_model.dart';
-import '../utils/country_codes_helper.dart';
 
 class _MobileInputWidgetState extends State<MobileInputWidget> {
   late TextEditingController _numberController;
