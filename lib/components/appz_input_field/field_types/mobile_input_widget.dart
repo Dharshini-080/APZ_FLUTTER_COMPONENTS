@@ -203,13 +203,14 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
       errorBorder: InputBorder.none,
       disabledBorder: InputBorder.none,
       focusedErrorBorder: InputBorder.none,
-      contentPadding: EdgeInsets.zero,
+      // Using contentPadding from the TextFormField itself now for better control
+      contentPadding: EdgeInsets.symmetric(vertical: style.paddingVertical), // Ensure vertical alignment
       isDense: true,
     );
 
     Widget countryCodeWidget;
     if (widget.countryCodeEditable) {
-      countryCodeWidget = DropdownButtonHideUnderline( // Hide default underline
+      countryCodeWidget = DropdownButtonHideUnderline(
         child: DropdownButtonFormField<CountryModel>(
           isDense: true,
           value: _selectedCountry,
@@ -229,23 +230,19 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
           onChanged: widget.isEnabled ? (CountryModel? newValue) {
             if (newValue != null) {
               if(mounted) {
-                setState(() {
-                _selectedCountry = newValue;
-              });
+                setState(() { _selectedCountry = newValue; });
               }
-              _onNumberOrCountryChanged(); // This will call _updateMainController
+              _onNumberOrCountryChanged();
             }
           } : null,
-          decoration: const InputDecoration( // Minimal decoration for the dropdown button itself
+          decoration: InputDecoration(
             border: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
+            contentPadding: EdgeInsets.symmetric(vertical: style.paddingVertical, horizontal: 4.0), // Adjusted
             isDense: true,
           ),
-          selectedItemBuilder: (BuildContext context) { // How the selected item looks in the button
+          selectedItemBuilder: (BuildContext context) {
               return _countryList.map<Widget>((CountryModel item) {
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 0.0), // Adjust to align with text field
-                    child: Row(
+                  return Row(
                         mainAxisAlignment: MainAxisAlignment.start,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: <Widget>[
@@ -253,8 +250,7 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
                             const SizedBox(width: 4),
                             Text(item.displayDialCode, style: TextStyle(fontSize: style.fontSize, fontFamily: style.fontFamily, color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5))),
                         ],
-                    ),
-                  );
+                    );
               }).toList();
           },
           icon: Icon(Icons.arrow_drop_down, color: widget.isEnabled ? style.labelColor : style.labelColor.withOpacity(0.5)),
@@ -264,7 +260,7 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
       );
     } else {
       countryCodeWidget = Padding(
-        padding: const EdgeInsets.symmetric(vertical: 0), // Align with TextFormField
+         padding: EdgeInsets.symmetric(vertical: style.paddingVertical), // Match TextFormField's effective padding
         child: Text(
           _selectedCountry.displayDialCode,
           style: TextStyle(
@@ -277,8 +273,7 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
     }
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: style.paddingHorizontal), // Vertical padding handled by content alignment
-      height: style.paddingVertical * 2 + style.fontSize * 2.5, // Approximate height based on content
+      padding: EdgeInsets.symmetric(horizontal: style.paddingHorizontal),
       decoration: BoxDecoration(
         color: widget.isEnabled ? style.backgroundColor : style.backgroundColor.withOpacity(0.5),
         borderRadius: BorderRadius.circular(style.borderRadius),
@@ -287,37 +282,39 @@ class _MobileInputWidgetState extends State<MobileInputWidget> {
           width: style.borderWidth,
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          countryCodeWidget,
-          SizedBox(width: style.paddingHorizontal / 2),
-          Container(
-            height: style.fontSize * 1.2,
-            width: 1,
-            color: style.borderColor.withOpacity(0.5),
-            margin: EdgeInsets.symmetric(horizontal: style.paddingHorizontal / 2.5),
-          ),
-          Expanded(
-            child: TextFormField(
-              controller: _numberController,
-              focusNode: widget.mainFocusNode,
-              enabled: widget.isEnabled,
-              style: TextStyle(
-                color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
-                fontFamily: style.fontFamily,
-                fontSize: style.fontSize,
-              ),
-              decoration: numberInputDecoration,
-              keyboardType: TextInputType.phone,
-              inputFormatters: [
-                FilteringTextInputFormatter.digitsOnly,
-                LengthLimitingTextInputFormatter(10),
-              ],
-              validator: widget.validator,
+      child: IntrinsicHeight( // Ensures Row children try to conform to a common height
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            countryCodeWidget,
+            // SizedBox(width: style.paddingHorizontal / 2), // Original spacing - might be too much with divider
+            Container(
+              height: style.fontSize * 1.5, // Make divider height relative to font
+              width: 1,
+              color: style.borderColor.withOpacity(0.5),
+              margin: EdgeInsets.symmetric(horizontal: style.paddingHorizontal / 2), // Adjusted spacing
             ),
-          ),
-        ],
+            Expanded(
+              child: TextFormField(
+                controller: _numberController,
+                focusNode: widget.mainFocusNode,
+                enabled: widget.isEnabled,
+                style: TextStyle(
+                  color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
+                  fontFamily: style.fontFamily,
+                  fontSize: style.fontSize,
+                ),
+                decoration: numberInputDecoration,
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                validator: widget.validator,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

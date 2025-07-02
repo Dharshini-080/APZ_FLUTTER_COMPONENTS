@@ -198,8 +198,9 @@ class _AppzInputFieldState extends State<AppzInputField> {
   String? _performValidation(String? value) {
     _validationErrorMessage = null;
     String? valueToPassToExternalValidator = value;
-    String? valueForBuiltInChecks = value;
+    String? valueForBuiltInFinalChecks = value;
 
+    // 1. Prepare value for external validator and built-in checks if it's mobile type
     if (widget.fieldType == AppzFieldType.mobile) {
       String numberPart = "";
       if (value != null && value.startsWith("+")) {
@@ -211,49 +212,75 @@ class _AppzInputFieldState extends State<AppzInputField> {
             break;
           }
         }
-        if (!foundPrefix) numberPart = value;
-      } else if (value != null) {
+        // If no known prefix is found but starts with "+", it's ambiguous for length check.
+        // User's validator gets the part after '+', or full value if parsing is too complex here.
+        // For simplicity, if no known prefix, let numberPart be what's after '+' or original value.
+        if (!foundPrefix) numberPart = value.startsWith("+") ? value.substring(1) : value;
+      } else if (value != null) { // No "+" prefix
         numberPart = value;
       }
       valueToPassToExternalValidator = numberPart;
-      valueForBuiltInChecks = numberPart;
+      valueForBuiltInFinalChecks = numberPart;
     }
+    // For default, aadhaar, mpin, the 'value' from _internalController is used directly
+    // as their 'widget.validator' (the composed one) expects the full string.
 
+    // 2. Call the effective validator
+    //    (User-provided for defaultType; user-provided for mobile (gets number part);
+    //     composed validator for aadhaar & mpin (gets full value))
     if (widget.validator != null) {
       _validationErrorMessage = widget.validator!(valueToPassToExternalValidator);
     }
 
+    // 3. If no error from the effective validator (or if it was null),
+    //    apply remaining built-in AppzInputValidationType checks.
     if (_validationErrorMessage == null) {
-      final String currentValForBuiltIn = valueForBuiltInChecks ?? "";
+      final String currentValForBuiltIn = valueForBuiltInFinalChecks ?? "";
+
+      // Generic Mandatory Check (applies if not caught by a more specific composed validator or user's validator)
       if (widget.validationType == AppzInputValidationType.mandatory && currentValForBuiltIn.isEmpty) {
-        _validationErrorMessage = 'This field is required.';
+        _validationErrorMessage = 'This field is required.'; // TODO: Localize
       }
+
+      // FieldType-specific built-in checks (primarily for defaultType and a fallback for mobile length)
+      // These run only if mandatory check passed (or wasn't set) and no prior error.
       if (_validationErrorMessage == null) {
         switch (widget.fieldType) {
           case AppzFieldType.defaultType:
             if (widget.validationType == AppzInputValidationType.email && currentValForBuiltIn.isNotEmpty) {
               final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
-              if (!emailRegex.hasMatch(currentValForBuiltIn)) _validationErrorMessage = 'Enter a valid email address.';
+              if (!emailRegex.hasMatch(currentValForBuiltIn)) {
+                _validationErrorMessage = 'Enter a valid email address.'; // TODO: Localize
+              }
             } else if (widget.validationType == AppzInputValidationType.numeric && currentValForBuiltIn.isNotEmpty) {
-              if (double.tryParse(currentValForBuiltIn) == null) _validationErrorMessage = 'Enter a valid number.';
+              if (double.tryParse(currentValForBuiltIn) == null) {
+                _validationErrorMessage = 'Enter a valid number.'; // TODO: Localize
+              }
             }
+            // TODO: Add AppzInputValidationType.amount, .password for defaultType if needed
             break;
           case AppzFieldType.mobile:
-            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != 10) _validationErrorMessage = 'Mobile number must be 10 digits.';
+            // This length check is a fallback/standard check for the number part.
+            // The composed validator in AppzInputField's build method for mobile also does this,
+            // but this ensures it if user provided their own validator that didn't check length.
+            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != 10) {
+              _validationErrorMessage = 'Mobile number must be 10 digits.'; // TODO: Localize
+            }
             break;
+          // For Aadhaar and MPIN, their specific format/length validations are primarily handled
+          // by the composed 'validator' functions defined in AppzInputField's build method when
+          // their respective sub-widgets are instantiated. Those composed validators already include
+          // mandatory and length checks. So, no further specific built-in checks are strictly needed here
+          // for Aadhaar/MPIN length/format if those composed validators are comprehensive.
           case AppzFieldType.aadhaar:
-            final unformattedAadhaar = currentValForBuiltIn.replaceAll(' ', '');
-            if (unformattedAadhaar.isNotEmpty && unformattedAadhaar.length != 12) _validationErrorMessage = 'Aadhaar number must be 12 digits.';
-            break;
           case AppzFieldType.mpin:
-            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != widget.mpinLength) _validationErrorMessage = 'MPIN must be ${widget.mpinLength} digits.';
-            break;
-          default:
+          default: // Covers fileUpload, textDescription and any other future types
             break;
         }
       }
     }
 
+    // Update state
     if (_validationErrorMessage != null) {
       _updateState(AppzFieldState.error, errorMessage: _validationErrorMessage);
     } else if (!_isFocused) {
