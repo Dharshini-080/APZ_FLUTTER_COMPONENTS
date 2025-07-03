@@ -1,9 +1,8 @@
+import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_theme.dart';
+import 'package:apz_flutter_components/components/appz_input_field/utils/country_codes_helper.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'appz_input_field_enums.dart';
 import 'appz_style_config.dart';
-// No longer need direct AadhaarInputFormatter here as sub-widget handles its segments
-// import 'formatters/aadhaar_input_formatter.dart';
 import 'field_types/aadhaar_input_widget.dart';
 import 'field_types/mpin_input_widget.dart';
 import 'field_types/mobile_input_widget.dart';
@@ -112,7 +111,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (_internalController.text != mpinValue) {
       _internalController.text = mpinValue;
     }
-    // Forward focus logic is now primarily in MpinInputWidget's segment onChanged
   }
 
   @override
@@ -162,10 +160,8 @@ class _AppzInputFieldState extends State<AppzInputField> {
     if (_isEffectivelyDisabled) return;
     widget.onChanged?.call(_internalController.text);
     _updateFilledState();
-    // Trigger validation on text change if autoValidateMode is onUserInteraction (handled by TextFormField)
-    // but for custom sub-widgets, we might need to trigger it explicitly if they don't have their own FormField context
     if (widget.fieldType != AppzFieldType.defaultType) { // DefaultType has TextFormField which handles this
-        _performValidation(_internalController.text);
+        //_performValidation(_internalController.text);
     }
   }
 
@@ -195,101 +191,105 @@ class _AppzInputFieldState extends State<AppzInputField> {
     }
   }
 
-  String? _performValidation(String? value) {
-    _validationErrorMessage = null;
-    String? valueToPassToExternalValidator = value;
-    String? valueForBuiltInFinalChecks = value;
+  /*String? _performValidation(String? value) {
+    String? validationError;
+    String? valueForUserValidator = value;
+    String? valueForBuiltIn = value;
 
-    // 1. Prepare value for external validator and built-in checks if it's mobile type
     if (widget.fieldType == AppzFieldType.mobile) {
       String numberPart = "";
       if (value != null && value.startsWith("+")) {
-        bool foundPrefix = false;
         for (var country in CountryCodesHelper.getCountries()) {
           if (value.startsWith(country.displayDialCode)) {
             numberPart = value.substring(country.displayDialCode.length);
-            foundPrefix = true;
             break;
           }
         }
-        // If no known prefix is found but starts with "+", it's ambiguous for length check.
-        // User's validator gets the part after '+', or full value if parsing is too complex here.
-        // For simplicity, if no known prefix, let numberPart be what's after '+' or original value.
-        if (!foundPrefix) numberPart = value.startsWith("+") ? value.substring(1) : value;
-      } else if (value != null) { // No "+" prefix
+      } else if (value != null) {
         numberPart = value;
       }
-      valueToPassToExternalValidator = numberPart;
-      valueForBuiltInFinalChecks = numberPart;
+      valueForUserValidator = numberPart;
+      valueForBuiltIn = numberPart;
     }
-    // For default, aadhaar, mpin, the 'value' from _internalController is used directly
-    // as their 'widget.validator' (the composed one) expects the full string.
 
-    // 2. Call the effective validator
-    //    (User-provided for defaultType; user-provided for mobile (gets number part);
-    //     composed validator for aadhaar & mpin (gets full value))
     if (widget.validator != null) {
-      _validationErrorMessage = widget.validator!(valueToPassToExternalValidator);
+      validationError = widget.validator!(valueForUserValidator);
     }
 
-    // 3. If no error from the effective validator (or if it was null),
-    //    apply remaining built-in AppzInputValidationType checks.
-    if (_validationErrorMessage == null) {
-      final String currentValForBuiltIn = valueForBuiltInFinalChecks ?? "";
-
-      // Generic Mandatory Check (applies if not caught by a more specific composed validator or user's validator)
-      if (widget.validationType == AppzInputValidationType.mandatory && currentValForBuiltIn.isEmpty) {
-        _validationErrorMessage = 'This field is required.'; // TODO: Localize
+    if (validationError == null) {
+      final val = valueForBuiltIn ?? '';
+      if (widget.validationType == AppzInputValidationType.mandatory && val.isEmpty) {
+        validationError = 'This field is required.';
       }
+      if (validationError == null) {
+        switch (widget.validationType) {
+          case AppzInputValidationType.email:
+            if (val.isNotEmpty && !RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(val)) {
+              validationError = 'Enter a valid email address.';
+            }
+            break;
+          case AppzInputValidationType.numeric:
+            if (val.isNotEmpty && !RegExp(r'^\d+$').hasMatch(val)) {
+              validationError = 'Only numbers allowed.';
+            }
+            break;
+          default:
+            break;
+        }
 
-      // FieldType-specific built-in checks (primarily for defaultType and a fallback for mobile length)
-      // These run only if mandatory check passed (or wasn't set) and no prior error.
-      if (_validationErrorMessage == null) {
-        switch (widget.fieldType) {
-          case AppzFieldType.defaultType:
-            if (widget.validationType == AppzInputValidationType.email && currentValForBuiltIn.isNotEmpty) {
-              final emailRegex = RegExp(r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+");
-              if (!emailRegex.hasMatch(currentValForBuiltIn)) {
-                _validationErrorMessage = 'Enter a valid email address.'; // TODO: Localize
-              }
-            } else if (widget.validationType == AppzInputValidationType.numeric && currentValForBuiltIn.isNotEmpty) {
-              if (double.tryParse(currentValForBuiltIn) == null) {
-                _validationErrorMessage = 'Enter a valid number.'; // TODO: Localize
-              }
-            }
-            // TODO: Add AppzInputValidationType.amount, .password for defaultType if needed
-            break;
-          case AppzFieldType.mobile:
-            // This length check is a fallback/standard check for the number part.
-            // The composed validator in AppzInputField's build method for mobile also does this,
-            // but this ensures it if user provided their own validator that didn't check length.
-            if (currentValForBuiltIn.isNotEmpty && currentValForBuiltIn.length != 10) {
-              _validationErrorMessage = 'Mobile number must be 10 digits.'; // TODO: Localize
-            }
-            break;
-          // For Aadhaar and MPIN, their specific format/length validations are primarily handled
-          // by the composed 'validator' functions defined in AppzInputField's build method when
-          // their respective sub-widgets are instantiated. Those composed validators already include
-          // mandatory and length checks. So, no further specific built-in checks are strictly needed here
-          // for Aadhaar/MPIN length/format if those composed validators are comprehensive.
-          case AppzFieldType.aadhaar:
-          case AppzFieldType.mpin:
-          default: // Covers fileUpload, textDescription and any other future types
-            break;
+        if (widget.fieldType == AppzFieldType.mobile &&
+            !RegExp(r'^\d{10}$').hasMatch(val)) {
+          validationError = 'Mobile number must be 10 digits.';
         }
       }
     }
 
-    // Update state
-    if (_validationErrorMessage != null) {
-      _updateState(AppzFieldState.error, errorMessage: _validationErrorMessage);
-    } else if (!_isFocused) {
-      _updateState(_internalController.text.isNotEmpty ? AppzFieldState.filled : AppzFieldState.defaultState);
-    } else if (_isFocused) {
-      _updateState(AppzFieldState.focused);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (validationError != _validationErrorMessage) {
+        _updateState(
+          validationError != null ? AppzFieldState.error : AppzFieldState.filled,
+          errorMessage: validationError,
+        );
+      }
+    });
+
+    return validationError;
+  }*/
+  String? _performValidation(String? value) {
+    String? validationError;
+
+    if (widget.fieldType == AppzFieldType.mobile || widget.fieldType == AppzFieldType.mpin || widget.fieldType == AppzFieldType.aadhaar) {
+      // Do not validate here for custom field types. Let them handle it internally.
+      return null;
     }
-    return _validationErrorMessage;
+
+    final val = value ?? '';
+
+    if (widget.validationType == AppzInputValidationType.mandatory && val.isEmpty) {
+      validationError = 'This field is required.';
+    }
+
+    if (validationError == null) {
+      switch (widget.validationType) {
+        case AppzInputValidationType.email:
+          if (val.isNotEmpty && !RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(val)) {
+            validationError = 'Enter a valid email address.';
+          }
+          break;
+        case AppzInputValidationType.numeric:
+          if (val.isNotEmpty && !RegExp(r'^\d+$').hasMatch(val)) {
+            validationError = 'Only numbers allowed.';
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    return validationError;
   }
+
 
   @override
   void dispose() {
@@ -317,17 +317,12 @@ class _AppzInputFieldState extends State<AppzInputField> {
     );
   }
 
-  // THIS IS THE CORRECTED BUILD METHOD
   @override
   Widget build(BuildContext context) {
     if (!AppzStyleConfig.instance.isInitialized) {
       return const Center(child: Text("Styles loading or failed..."));
     }
-
-    // print("DEBUG AppzInputField build: currentFieldState = $_currentFieldState, isEffectivelyDisabled = $_isEffectivelyDisabled, initialFieldState = ${widget.initialFieldState}, isFocused = $_isFocused, hasError = $_hasError, isFilled = $_isFilled, controllerText = '${_internalController.text}'");
-
     AppzFieldState stateForDeterminingStyle = _currentFieldState;
-    // Prioritize error and disabled states for styling if they are active
     if (_isEffectivelyDisabled) {
         stateForDeterminingStyle = AppzFieldState.disabled;
     } else if (_hasError) { // _hasError checks _currentFieldState == AppzFieldState.error
@@ -335,8 +330,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
     } else if (_isFocused) {
         stateForDeterminingStyle = AppzFieldState.focused;
     }
-    // 'filled' state styling is handled by passing `isFilled: _isFilled` to getStyleForState
-
     final AppzStateStyle style = AppzStyleConfig.instance.getStyleForState(stateForDeterminingStyle, isFilled: _isFilled);
     final InputDecoration baseFieldDecoration = _createBaseInputDecoration(style); // Used by defaultType
 
@@ -344,10 +337,24 @@ class _AppzInputFieldState extends State<AppzInputField> {
 
     switch (widget.fieldType) {
       case AppzFieldType.defaultType:
-        fieldWidget = TextFormField(
+        /*fieldWidget = TextFormField(
           controller: _internalController,
           focusNode: _internalFocusNode,
           decoration: baseFieldDecoration, // No specific overrides needed for defaultType
+          style: TextStyle(color: style.textColor, fontFamily: style.fontFamily, fontSize: style.fontSize),
+          validator: _performValidation,
+          onTap: widget.onTap,
+          onFieldSubmitted: widget.onSubmitted,
+          obscureText: widget.obscureText,
+          textInputAction: widget.textInputAction,
+          maxLength: widget.maxLength,
+          enabled: !_isEffectivelyDisabled,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+        );*/
+        fieldWidget = TextFormField(
+          controller: _internalController,
+          focusNode: _internalFocusNode,
+          decoration: baseFieldDecoration,
           style: TextStyle(color: style.textColor, fontFamily: style.fontFamily, fontSize: style.fontSize),
           validator: _performValidation,
           onTap: widget.onTap,
@@ -369,7 +376,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
           hintText: widget.hintText,
           countryCode: widget.mobileCountryCode,
           countryCodeEditable: widget.mobileCountryCodeEditable,
-          // onChanged is handled by _internalController listener in parent
           validator: widget.validator, // User's validator expects 10-digit number part
           validationType: widget.validationType,
         );
@@ -382,7 +388,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
           mainFocusNode: _internalFocusNode,
           isEnabled: !_isEffectivelyDisabled,
           hintText: widget.hintText,
-          // onChanged handled by _internalController listener
           validator: widget.validator, // User's validator, or composed one expects full 12 digits
           validationType: widget.validationType,
         );
@@ -396,7 +401,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
           isEnabled: !_isEffectivelyDisabled,
           obscureText: widget.obscureText,
           mpinLength: widget.mpinLength,
-          // onChanged handled by _internalController listener
           validator: widget.validator, // User's validator, or composed one expects full mpin
           validationType: widget.validationType,
         );
@@ -405,7 +409,6 @@ class _AppzInputFieldState extends State<AppzInputField> {
       case AppzFieldType.textDescription:
         fieldWidget = Text('Field type ${widget.fieldType.name} not yet fully implemented.');
         break;
-      // No default needed as all enum values are handled.
     }
 
     final String labelTextWithIndicator = (widget.validationType == AppzInputValidationType.mandatory && widget.label.isNotEmpty)
@@ -425,7 +428,20 @@ class _AppzInputFieldState extends State<AppzInputField> {
           const SizedBox(height: 6.0),
         ],
         fieldWidget, // Removed the outer Focus widget wrapper
-        if (_hasError && _validationErrorMessage != null)
+        if (_validationErrorMessage != null)
+        //if (widget.fieldType != AppzFieldType.defaultType && _hasError && _validationErrorMessage != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0),
+            child: Text(
+              _validationErrorMessage!,
+              style: TextStyle(
+                color: AppzStyleConfig.instance.getStyleForState(AppzFieldState.error, isFilled: _isFilled).textColor,
+                fontSize: style.labelFontSize * 0.9,
+                fontFamily: style.fontFamily),
+            ),
+          ),
+        /*if (widget.fieldType == AppzFieldType.defaultType && _hasError && _validationErrorMessage != null) 
+        //if (_hasError && _validationErrorMessage != null)
           Padding(
             padding: const EdgeInsets.only(top: 6.0),
             child: Text(
@@ -435,7 +451,7 @@ class _AppzInputFieldState extends State<AppzInputField> {
                   fontSize: style.labelFontSize * 0.9,
                   fontFamily: style.fontFamily),
             ),
-          ),
+          ),*/
       ],
     );
   }

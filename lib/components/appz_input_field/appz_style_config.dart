@@ -123,7 +123,7 @@ class AppzStyleConfig {
       if (defaultJson != null) {
         _defaultStyle = AppzStateStyle.fromJson(defaultJson, _fallbackDefaultStyle); // Base fallback for default itself
       } else {
-        print("Warning: 'default' style not found in ui_config.json. Using hardcoded fallback default style.");
+        print("Warning: 'default' style not found in input_ui_config.json. Using hardcoded fallback default style.");
         _defaultStyle = _fallbackDefaultStyle;
       }
       _isInitialized = true;

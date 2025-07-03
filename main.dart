@@ -10,6 +10,7 @@ Future<void> main() async {
   // Load the UI configuration
   // It's important to await this before runApp so styles are ready.
   await AppzStyleConfig.instance.load('assets/ui_config.json');
+  await AppzStyleConfig.instance.load('assets/input_ui_config.json');
 
   runApp(const MyApp());
 }

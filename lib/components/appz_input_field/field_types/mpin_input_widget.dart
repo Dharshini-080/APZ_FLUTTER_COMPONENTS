@@ -1,4 +1,6 @@
+import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../appz_input_field_enums.dart';
 import '../appz_style_config.dart';
 
@@ -179,7 +181,7 @@ class _MpinInputWidgetState extends State<MpinInputWidget> {
       ),
     );
 
-    return Row(
+    /*return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween, // Or .start with SizedBox for spacing
       children: List.generate(widget.mpinLength, (index) {
         return SizedBox(
@@ -231,6 +233,46 @@ class _MpinInputWidgetState extends State<MpinInputWidget> {
               // if (widget.mainController.text != combinedValue) {
               //   widget.mainController.text = combinedValue;
               // }
+            },
+          ),
+        );
+      }),
+    );*/
+    return Wrap(
+      spacing: 12, // Fixed minimal spacing between boxes
+      runSpacing: 8, // Optional: vertical spacing if it wraps
+      children: List.generate(widget.mpinLength, (index) {
+        return SizedBox(
+          width: 48,
+          height: 52,
+          child: TextFormField(
+            controller: _segmentControllers[index],
+            focusNode: _segmentFocusNodes[index],
+            enabled: widget.isEnabled,
+            textAlign: TextAlign.center,
+            maxLength: 1,
+            obscureText: widget.obscureText,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: TextStyle(
+              color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
+              fontFamily: style.fontFamily,
+              fontSize: style.fontSize + 4,
+              fontWeight: FontWeight.bold,
+            ),
+            decoration: mpinSegmentBaseDecoration,
+            onChanged: (value) {
+              if (value.isEmpty && index > 0) {
+                FocusScope.of(context).requestFocus(_segmentFocusNodes[index - 1]);
+                _segmentControllers[index - 1].selection = TextSelection(
+                  baseOffset: 0,
+                  extentOffset: _segmentControllers[index - 1].text.length,
+                );
+              } else if (value.isNotEmpty && index < widget.mpinLength - 1) {
+                FocusScope.of(context).requestFocus(_segmentFocusNodes[index + 1]);
+              } else if (index == widget.mpinLength - 1) {
+                _segmentFocusNodes[index].unfocus();
+              }
             },
           ),
         );

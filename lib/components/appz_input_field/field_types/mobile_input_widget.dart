@@ -1,31 +1,31 @@
+import 'package:apz_flutter_components/components/appz_input_field/appz_input_field_enums.dart';
+import 'package:apz_flutter_components/components/appz_input_field/appz_style_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../appz_input_field_enums.dart';
-import '../appz_style_config.dart';
+import 'package:phonecodes/phonecodes.dart';
+import '../appz_input_field_theme.dart';
 
 class MobileInputWidget extends StatefulWidget {
-  final AppzStateStyle currentStyle;
-  final TextEditingController mainController; // Will store the full "+91XXXXXXXXXX"
-  final FocusNode? mainFocusNode; // Focus for the number input part
+  final TextEditingController mainController;
+  final FocusNode mainFocusNode;
   final bool isEnabled;
-  final String? hintText; // Hint for the number part
+  final String? hintText;
   final String countryCode;
-  final bool countryCodeEditable; // Future: for editable country code
-  final ValueChanged<String>? onChanged; // Called with full number "+91XXXXXXXXXX"
-  final FormFieldValidator<String>? validator; // Validates the 10-digit number part
+  final bool countryCodeEditable;
+  final AppzStateStyle currentStyle;
+  final FormFieldValidator<String>? validator;
   final AppzInputValidationType validationType;
 
   const MobileInputWidget({
     super.key,
-    required this.currentStyle,
-    required this.mainController, // This controller is now for the full number
-    this.mainFocusNode,
+    required this.mainController,
+    required this.mainFocusNode,
     required this.isEnabled,
-    this.hintText,
-    this.countryCode = "+91",
-    this.countryCodeEditable = false,
-    this.onChanged,
-    this.validator,
+    required this.hintText,
+    required this.countryCode,
+    required this.countryCodeEditable,
+    required this.currentStyle,
+    required this.validator,
     required this.validationType,
   });
 
@@ -33,297 +33,432 @@ class MobileInputWidget extends StatefulWidget {
   State<MobileInputWidget> createState() => _MobileInputWidgetState();
 }
 
-import '../utils/country_model.dart';
-import '../utils/country_codes_helper.dart';
-
 class _MobileInputWidgetState extends State<MobileInputWidget> {
   late TextEditingController _numberController;
-  late CountryModel _selectedCountry;
-  List<CountryModel> _countryList = [];
+  late Country selectedCountry;
+  final LayerLink _dropdownLink = LayerLink();
+  final GlobalKey _dropdownKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+
+  String? _errorText;
 
   @override
   void initState() {
     super.initState();
-    _countryList = CountryCodesHelper.getCountries();
     _numberController = TextEditingController();
-    _initializeState(); // Handles initial country and number from mainController
-    _numberController.addListener(_onNumberOrCountryChanged);
-    widget.mainController.addListener(_onMainControllerChanged);
+    selectedCountry = Country.values.firstWhere(
+      (c) => c.dialCode == widget.countryCode,
+      orElse: () => Country.india,
+    );
+    _numberController.addListener(_updateCombinedValue);
   }
 
-  void _initializeState() {
-    final initialFullNumber = widget.mainController.text;
-    CountryModel? foundCountry;
-    String initialNumberPart = "";
-
-    if (initialFullNumber.isNotEmpty && initialFullNumber.startsWith("+")) {
-      for (var country in _countryList) {
-        // Use displayDialCode which includes '+'
-        if (initialFullNumber.startsWith(country.displayDialCode)) {
-          foundCountry = country;
-          initialNumberPart = initialFullNumber.substring(country.displayDialCode.length);
-          break;
-        }
-      }
-    }
-
-    // Determine initial selected country
-    if (foundCountry != null) {
-      _selectedCountry = foundCountry;
-    } else {
-      // Try to find by widget.countryCode (which is like "+91")
-      _selectedCountry = CountryCodesHelper.getCountryByDialCode(widget.countryCode) ?? CountryCodesHelper.getDefaultCountry();
-      // If main controller had text but didn't match any known prefix, assume it's the number part.
-      if (initialFullNumber.isNotEmpty && foundCountry == null && !initialFullNumber.startsWith("+")) {
-          initialNumberPart = initialFullNumber;
-      }
-    }
-
-    // Set number part
-    if (_numberController.text != initialNumberPart) {
-      _numberController.value = TextEditingValue(
-        text: initialNumberPart,
-        selection: TextSelection.collapsed(offset: initialNumberPart.length),
-      );
-    }
-
-    // Ensure main controller reflects the initial state correctly (with country code)
-    // especially if initialFullNumber was just the number part.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _updateMainController();
-    });
+  void _updateCombinedValue() {
+    widget.mainController.text =
+        '${selectedCountry.dialCode} ${_numberController.text}';
+    _validate(_numberController.text);
   }
 
-  void _onMainControllerChanged() {
-    final fullText = widget.mainController.text;
-    final currentCombinedFromState = _selectedCountry.displayDialCode + _numberController.text;
+  void _validate(String? val) {
+    final digitsOnly = val?.replaceAll(RegExp(r'\D'), '') ?? '';
+    String? error;
 
-    if (fullText == currentCombinedFromState) return; // Already in sync
-
-    CountryModel? newSelectedCountry = _selectedCountry;
-    String newNumberPart = "";
-
-    if (fullText.isNotEmpty && fullText.startsWith("+")) {
-       for (var country in _countryList) {
-        if (fullText.startsWith(country.displayDialCode)) {
-          newSelectedCountry = country;
-          newNumberPart = fullText.substring(country.displayDialCode.length);
-          break;
-        }
-      }
-       // If no country code prefix matched, but it starts with +, it's ambiguous.
-       // Keep current selected country and assume rest is number.
-       if(newSelectedCountry == _selectedCountry && !fullText.startsWith(_selectedCountry.displayDialCode)){
-         newNumberPart = fullText; // Or parse out a potential number part
-       }
-
-    } else if (fullText.isNotEmpty) {
-      // No "+" prefix, assume it's a number part for the current country
-      newNumberPart = fullText;
+    if (widget.validationType == AppzInputValidationType.mandatory &&
+        digitsOnly.isEmpty) {
+      error = 'This field is required.';
+    } else if (!RegExp(r'^\d{10}$').hasMatch(digitsOnly)) {
+      error = 'Mobile number must be 10 digits.';
     }
 
-    _numberController.removeListener(_onNumberOrCountryChanged);
-    bool needsSetState = false;
-    if (newSelectedCountry != null && _selectedCountry.isoCode != newSelectedCountry.isoCode) { // Ensure newSelectedCountry is not null before comparing isoCode
-      _selectedCountry = newSelectedCountry;
-      needsSetState = true;
-    } else if (newSelectedCountry == null && fullText.isNotEmpty && fullText.startsWith("+")) { // Used fullText here
-        // This case means a prefix was entered that didn't match any known country.
-        // We might want to clear _selectedCountry or set to a very generic default,
-        // or keep the old _selectedCountry and just update the number part.
-        // For now, keeping the old _selectedCountry if no new valid one is found from prefix.
-        // The numberPart would have been set to text after '+', which might be an invalid number for old country.
+    if (error == null && widget.validator != null) {
+      error = widget.validator!(digitsOnly);
     }
 
-    if (_numberController.text != newNumberPart) {
-      _numberController.value = TextEditingValue(
-        text: newNumberPart,
-        selection: TextSelection.collapsed(offset: newNumberPart.length),
-      );
-    }
-    _numberController.addListener(_onNumberOrCountryChanged);
-    if(needsSetState && mounted) setState(() {});
-  }
-
-  void _onNumberOrCountryChanged() { // Called by _numberController listener OR dropdown onChanged
-    _updateMainController();
-  }
-
-  void _updateMainController() {
-    final String fullMobileNumber = _selectedCountry.displayDialCode + _numberController.text;
-    if (widget.mainController.text != fullMobileNumber) {
-      widget.mainController.value = TextEditingValue(
-        text: fullMobileNumber,
-        selection: TextSelection.fromPosition(TextPosition(offset: fullMobileNumber.length)),
-      );
-      // AppzInputField's listener on mainController will trigger its onChanged
+    if (_errorText != error) {
+      setState(() => _errorText = error);
     }
   }
 
-  @override
-  void didUpdateWidget(covariant MobileInputWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.mainController != oldWidget.mainController) {
-      oldWidget.mainController.removeListener(_onMainControllerChanged);
-      widget.mainController.addListener(_onMainControllerChanged);
-      _initializeState();
-    }
-    // If countryCode prop changes AND dropdown is not editable, update _selectedCountry
-    if (widget.countryCode != oldWidget.countryCode && !widget.countryCodeEditable) {
-        final newCountry = CountryCodesHelper.getCountryByDialCode(widget.countryCode);
-        if (newCountry != null && newCountry.isoCode != _selectedCountry.isoCode) {
-           if (mounted) {
-            setState(() {
-              _selectedCountry = newCountry;
-            });
-          }
-          _updateMainController();
-        }
-    }
-     if (widget.countryCodeEditable != oldWidget.countryCodeEditable) {
-        if(mounted) setState(() {}); // Trigger rebuild to show/hide dropdown
-    }
+  void _showDropdown() {
+    _hideDropdown();
+    _overlayEntry = _buildDropdownOverlay();
+    Overlay.of(context, rootOverlay: true).insert(_overlayEntry!);
+  }
+
+  void _hideDropdown() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  OverlayEntry _buildDropdownOverlay() {
+    final RenderBox box =
+        _dropdownKey.currentContext!.findRenderObject() as RenderBox;
+    final double width = box.size.width;
+
+    return OverlayEntry(
+      builder: (context) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _hideDropdown,
+          child: Stack(
+            children: [
+              CompositedTransformFollower(
+                link: _dropdownLink,
+                showWhenUnlinked: false,
+                offset: Offset(0, box.size.height + 6),
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(8),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: 250, maxWidth: width),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: Country.values.length,
+                      itemBuilder: (_, index) {
+                        final country = Country.values[index];
+                        return ListTile(
+                          leading: Text('${country.flag} ${country.dialCode}'),
+                          onTap: () {
+                            setState(() => selectedCountry = country);
+                            _updateCombinedValue();
+                            _hideDropdown();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
   void dispose() {
-    widget.mainController.removeListener(_onMainControllerChanged);
-    _numberController.removeListener(_onNumberOrCountryChanged);
+    _numberController.removeListener(_updateCombinedValue);
     _numberController.dispose();
+    _hideDropdown();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final AppzStateStyle style = widget.currentStyle;
+    final style = widget.currentStyle;
 
-    final numberInputDecoration = InputDecoration(
-      hintText: widget.hintText ?? '00000 00000',
-      hintStyle: TextStyle(
-        color: style.textColor.withOpacity(0.5),
-        fontFamily: style.fontFamily,
-        fontSize: style.fontSize,
-      ),
-      border: InputBorder.none,
-      focusedBorder: InputBorder.none,
-      enabledBorder: InputBorder.none,
-      errorBorder: InputBorder.none,
-      disabledBorder: InputBorder.none,
-      focusedErrorBorder: InputBorder.none,
-      // Using contentPadding from the TextFormField itself now for better control
-      contentPadding: EdgeInsets.symmetric(vertical: style.paddingVertical), // Ensure vertical alignment
-      isDense: true,
-    );
-
-    Widget countryCodeWidget;
-    if (widget.countryCodeEditable) {
-      countryCodeWidget = DropdownButtonHideUnderline(
-        child: DropdownButtonFormField<CountryModel>(
-          isDense: true,
-          value: _selectedCountry,
-          items: _countryList.map((CountryModel country) {
-            return DropdownMenuItem<CountryModel>(
-              value: country,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(country.flagEmoji, style: TextStyle(fontSize: style.fontSize * 1.2)),
-                  const SizedBox(width: 6.0),
-                  Text(country.displayDialCode, style: TextStyle(fontSize: style.fontSize, fontFamily: style.fontFamily, color: style.textColor)),
-                ],
-              ),
-            );
-          }).toList(),
-          onChanged: widget.isEnabled ? (CountryModel? newValue) {
-            if (newValue != null) {
-              if(mounted) {
-                setState(() { _selectedCountry = newValue; });
-              }
-              _onNumberOrCountryChanged();
-            }
-          } : null,
-          decoration: InputDecoration( // Minimal decoration for the dropdown button itself
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.zero, // Let parent handle padding
-            isDense: true,
-            isCollapsed: true, // Important for tight layout
-          ),
-          selectedItemBuilder: (BuildContext context) {
-              return _countryList.map<Widget>((CountryModel item) {
-                  return Row(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: <Widget>[
-                            Text(item.flagEmoji, style: TextStyle(fontSize: style.fontSize * 1.2)),
-                            const SizedBox(width: 4),
-                            Text(item.displayDialCode, style: TextStyle(fontSize: style.fontSize, fontFamily: style.fontFamily, color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5))),
-                        ],
-                    );
-              }).toList();
-          },
-          icon: Icon(Icons.arrow_drop_down, color: widget.isEnabled ? style.labelColor : style.labelColor.withOpacity(0.5)),
-          iconSize: style.fontSize * 1.5,
-          isExpanded: false,
-        ),
-      );
-    } else {
-      countryCodeWidget = Padding(
-         padding: EdgeInsets.symmetric(vertical: style.paddingVertical), // Match TextFormField's effective padding
-        child: Text(
-          _selectedCountry.displayDialCode,
-          style: TextStyle(
-            color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
-            fontFamily: style.fontFamily,
-            fontSize: style.fontSize,
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: style.paddingHorizontal),
-      decoration: BoxDecoration(
-        color: widget.isEnabled ? style.backgroundColor : style.backgroundColor.withOpacity(0.5),
-        borderRadius: BorderRadius.circular(style.borderRadius),
-        border: Border.all(
-          color: style.borderColor,
-          width: style.borderWidth,
-        ),
-      ),
-      child: IntrinsicHeight( // Ensures Row children try to conform to a common height
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            countryCodeWidget,
-            // SizedBox(width: style.paddingHorizontal / 2), // Original spacing - might be too much with divider
-            Container(
-              height: style.fontSize * 1.5, // Make divider height relative to font
-              width: 1,
-              color: style.borderColor.withOpacity(0.5),
-              margin: EdgeInsets.symmetric(horizontal: style.paddingHorizontal / 2), // Adjusted spacing
-            ),
-            Expanded(
-              child: TextFormField(
-                controller: _numberController,
-                focusNode: widget.mainFocusNode,
-                enabled: widget.isEnabled,
-                style: TextStyle(
-                  color: widget.isEnabled ? style.textColor : style.textColor.withOpacity(0.5),
-                  fontFamily: style.fontFamily,
-                  fontSize: style.fontSize,
+            CompositedTransformTarget(
+              link: _dropdownLink,
+              child: GestureDetector(
+                key: _dropdownKey,
+                onTap: widget.countryCodeEditable && widget.isEnabled
+                    ? _showDropdown
+                    : null,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 100, maxWidth: 120),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: style.backgroundColor,
+                    borderRadius: BorderRadius.circular(style.borderRadius),
+                    border: Border.all(
+                        color: style.borderColor, width: style.borderWidth),
+                  ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${selectedCountry.flag} ${selectedCountry.dialCode}',
+                          style: TextStyle(
+                            fontSize: style.fontSize,
+                            color: style.textColor,
+                            fontFamily: style.fontFamily,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_drop_down, size: 20),
+                      ],
+                    ),
+                  ),
                 ),
-                decoration: numberInputDecoration,
-                keyboardType: TextInputType.phone,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(10),
-                ],
-                validator: widget.validator,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: style.backgroundColor,
+                  borderRadius: BorderRadius.circular(style.borderRadius),
+                  border: Border.all(
+                      color: style.borderColor, width: style.borderWidth),
+                ),
+                child: TextField(
+                  controller: _numberController,
+                  focusNode: widget.mainFocusNode,
+                  enabled: widget.isEnabled,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    hintText: widget.hintText ?? 'Enter number',
+                    hintStyle: TextStyle(
+                      color: style.textColor.withOpacity(0.5),
+                      fontSize: style.fontSize,
+                      fontFamily: style.fontFamily,
+                    ),
+                  ),
+                  style: TextStyle(
+                    color: style.textColor,
+                    fontSize: style.fontSize,
+                    fontFamily: style.fontFamily,
+                  ),
+                ),
               ),
             ),
           ],
         ),
-      ),
+        if (_errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6.0),
+            child: Text(
+              _errorText!,
+              style: TextStyle(
+                color: AppzStyleConfig.instance
+                    .getStyleForState(AppzFieldState.error)
+                    .textColor,
+                fontSize: style.labelFontSize * 0.9,
+                fontFamily: style.fontFamily,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
+/*import 'package:apz_flutter_components/components/appz_input_field/appz_style_config.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:phonecodes/phonecodes.dart';
+import '../appz_input_field_theme.dart';
+
+class MobileInputWidget extends StatefulWidget {
+  final TextEditingController mainController;
+  final FocusNode mainFocusNode;
+  final bool isEnabled;
+  final String? hintText;
+  final String countryCode;
+  final bool countryCodeEditable;
+  final AppzStateStyle currentStyle;
+  final FormFieldValidator<String>? validator;
+  final AppzInputValidationType validationType;
+
+  const MobileInputWidget({
+    super.key,
+    required this.mainController,
+    required this.mainFocusNode,
+    required this.isEnabled,
+    required this.hintText,
+    required this.countryCode,
+    required this.countryCodeEditable,
+    required this.currentStyle,
+    required this.validator,
+    required this.validationType,
+  });
+
+  @override
+  State<MobileInputWidget> createState() => _MobileInputWidgetState();
+}
+
+class _MobileInputWidgetState extends State<MobileInputWidget> {
+  late TextEditingController _numberController;
+  late Country selectedCountry;
+  final LayerLink _dropdownLink = LayerLink();
+  final GlobalKey _dropdownKey = GlobalKey();
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void initState() {
+    super.initState();
+    _numberController = TextEditingController();
+    selectedCountry = Country.values.firstWhere(
+      (c) => c.dialCode == widget.countryCode,
+      orElse: () => Country.india,
+    );
+    _numberController.addListener(_updateCombinedValue);
+  }
+
+  void _updateCombinedValue() {
+    widget.mainController.text = '${selectedCountry.dialCode} ${_numberController.text}';
+  }
+
+  void _showDropdown() {
+    _hideDropdown();
+    _overlayEntry = _buildDropdownOverlay();
+    Overlay.of(context, rootOverlay: true).insert(_overlayEntry!);
+  }
+
+  void _hideDropdown() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  OverlayEntry _buildDropdownOverlay() {
+    final RenderBox box = _dropdownKey.currentContext!.findRenderObject() as RenderBox;
+    final double width = box.size.width;
+
+    return OverlayEntry(
+      builder: (context) {
+        return GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _hideDropdown,
+          child: Stack(
+            children: [
+              CompositedTransformFollower(
+                link: _dropdownLink,
+                showWhenUnlinked: false,
+                offset: Offset(0, box.size.height + 6),
+                child: Material(
+                  elevation: 4,
+                  borderRadius: BorderRadius.circular(8),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: 250,
+                      maxWidth: width,
+                    ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: Country.values.length,
+                      itemBuilder: (_, index) {
+                        final country = Country.values[index];
+                        return ListTile(
+                          leading: Text('${country.flag} ${country.dialCode}'),
+                          //title: Text('${country.name} (${country.dialCode})'),
+                          onTap: () {
+                            setState(() => selectedCountry = country);
+                            _updateCombinedValue();
+                            _hideDropdown();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _numberController.removeListener(_updateCombinedValue);
+    _numberController.dispose();
+    _hideDropdown();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final style = widget.currentStyle;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CompositedTransformTarget(
+          link: _dropdownLink,
+          child: GestureDetector(
+            key: _dropdownKey,
+            onTap: widget.countryCodeEditable && widget.isEnabled ? _showDropdown : null,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 100, maxWidth: 120),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+              decoration: BoxDecoration(
+                color: style.backgroundColor,
+                borderRadius: BorderRadius.circular(style.borderRadius),
+                border: Border.all(color: style.borderColor, width: style.borderWidth),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${selectedCountry.flag} ${selectedCountry.dialCode}',
+                      style: TextStyle(
+                        fontSize: style.fontSize,
+                        color: style.textColor,
+                        fontFamily: style.fontFamily,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.arrow_drop_down, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: style.backgroundColor,
+              borderRadius: BorderRadius.circular(style.borderRadius),
+              border: Border.all(color: style.borderColor, width: style.borderWidth),
+            ),
+            child: TextFormField(
+              controller: _numberController,
+              focusNode: widget.mainFocusNode,
+              enabled: widget.isEnabled,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                hintText: widget.hintText ?? 'Enter number',
+                hintStyle: TextStyle(
+                  color: style.textColor.withOpacity(0.5),
+                  fontSize: style.fontSize,
+                  fontFamily: style.fontFamily,
+                ),
+              ),
+              style: TextStyle(
+                color: style.textColor,
+                fontSize: style.fontSize,
+                fontFamily: style.fontFamily,
+              ),
+              //validator: (_) => null,
+              validator: (val) {
+                final digitsOnly = val?.replaceAll(RegExp(r'\D'), '') ?? '';
+                
+                if (widget.validationType == AppzInputValidationType.mandatory && digitsOnly.isEmpty) {
+                  return 'This field is required.';
+                }
+                if (!RegExp(r'^\d{10}$').hasMatch(digitsOnly)) {
+                  return 'Mobile number must be 10 digits.';
+                }
+                if (widget.validator != null) {
+                  return widget.validator!(digitsOnly);
+                }
+                return null;
+              },
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}*/
