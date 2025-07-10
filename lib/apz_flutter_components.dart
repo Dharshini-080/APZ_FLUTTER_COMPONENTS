@@ -1,5 +1,5 @@
-/// A Calculator.
-class Calculator {
-  /// Returns [value] plus 1.
-  int addOne(int value) => value + 1;
-}
+library apz_flutter_components;
+
+// Export categories
+export 'components/apz_categories/apz_categories.dart';
+export 'components/apz_categories/apz_categories_example.dart';

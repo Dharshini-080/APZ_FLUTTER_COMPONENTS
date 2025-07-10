@@ -1,13 +1,16 @@
-import 'package:flutter/material.dart';
-// Alerts
+import 'package:apz_flutter_components/widgets/progress_circle/with_label/xs.dart';
+import 'package:flutter/material.dart';// Alerts
+
+import '../components/apz_categories/apz_categories.dart';
+import '../components/apz_categories/apz_categories_test_example.dart';
 import 'alerts/alerts.dart';
 // Badges (example: sm)
 // import 'badges/sm/example.dart';
 // Buttons
 import 'buttons/custom.dart';
 // Categories
-import 'categories/horizontal.dart';
-import 'categories/verytical.dart';
+// import '../components/apz_categories/categories.dart';
+// import '../components/apz_categories/category_properties.dart';
 // Chips
 import 'chips/active.dart';
 import 'chips/disabled.dart';
@@ -39,7 +42,7 @@ import 'pop_over/default.dart';
 // Progress Bar
 import 'progress_bar/with_label.dart';
 // Progress Circle
-import 'progress_circle/with_label/xs.dart';
+
 // Progress Step
 import 'progress_step/progress_step.dart';
 // Promotions
@@ -71,8 +74,9 @@ class WidgetDemo {
 final List<WidgetDemo> widgetDemos = [
   WidgetDemo(name: 'Alerts', builder: (_) => Property1Default()),
   // WidgetDemo(name: 'Custom Button', builder: (_) => CustomButton()), // Uncomment and fix if CustomButton exists
-  WidgetDemo(name: 'Categories Horizontal', builder: (_) => AppCategoriesHorizontal()),
-  WidgetDemo(name: 'Categories Vertical', builder: (_) => AppCategoriesVertical()),
+ 
+  WidgetDemo(name: 'Categories', builder: (_) => ApzCategoriesTestExample()),
+  
   WidgetDemo(name: 'Chips Active', builder: (_) => Property1Active()),
   WidgetDemo(name: 'Chips Disabled', builder: (_) => Property1Disable()),
   WidgetDemo(name: 'Dropdown Default', builder: (_) => dropdown_default.StateDefault()),
@@ -90,7 +94,7 @@ final List<WidgetDemo> widgetDemos = [
   WidgetDemo(name: 'Navbar', builder: (_) => NavFooter()),
   WidgetDemo(name: 'Pop Over Default', builder: (_) => StateDefault()),
   WidgetDemo(name: 'Progress Bar With Label', builder: (_) => Progress0LabelRight()),
-  WidgetDemo(name: 'Progress Circle XS With Label', builder: (_) => SizeXsLabelTrue()),
+  WidgetDemo(name:  'Progress Circle XS with label', builder: (_)=> SizeXsLabelTrue()),
   WidgetDemo(name: 'Progress Step', builder: (_) => ProgressSteps()),
   WidgetDemo(name: 'Promotions', builder: (_) => Promotions()),
   WidgetDemo(name: 'Searchbar Enabled LG', builder: (_) => StateEnabledSizeLg()),
